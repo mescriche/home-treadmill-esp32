@@ -104,35 +104,6 @@ static void speedctrl_actor(void* pvParameter)
   }
 }
 
-/* static void speedctrl_req_actor(void * pvParameter) */
-/* { */
-/*   TickType_t xLastWakeTime = xTaskGetTickCount(); */
-/*   TickType_t start, end, now, begin = xLastWakeTime; */
-/*   SpdCtrlRec_t req_backup, request = {0, 5}; */
-/*   BaseType_t xResult; */
-/*   UBaseType_t uxHighWaterMark; */
-/*   uint32_t    queue_event = pdFALSE; //cleared queue */
-/*   while(1){ */
-/*     // uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL ); */
-/*     //ESP_LOGI(TAG, "SPEEDCTRL :: watermark=%d", uxHighWaterMark); */
-/*     now = xTaskGetTickCount(); */
-/*     req_backup = request; */
-/*     xResult = speedctrl_get(&request); // no wait */
-/*     ESP_LOGI(TAG, "SPEEDCTRL :: ENGINE:request={speed=%.1f, duration=%d}, time=%d ", request.rspeed, request.duration, (now-begin)/100 ); */
-/*     if (xResult == pdFALSE) request = req_backup; */
-/*     start = xTaskGetTickCount(); */
-/*     end = start + request.duration * 100; */
-/*     do { */
-/*       speedctrl_do(request.rspeed, bbrd.ispeed); */
-/*       now = xTaskGetTickCount(); */
-/*       //ESP_LOGI(TAG, "SPEEDCTRL :: DO rspeed=%.1f, ispeed=%.1f, time=%d} ", request.rspeed, bbrd.ispeed, (now - start)/100); */
-/*       queue_event = ulTaskNotifyTake(pdTRUE, (TickType_t)0); //clear on exit, no wait */
-/*       //ESP_LOGI(TAG, "SPEEDCTRL :: QUEUE EVENT=%d", queue_event); */
-/*       vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(100)); */
-/*     } while (xLastWakeTime < end && queue_event != pdTRUE); */
-/*   } */
-/* } */
-
 static void slopectrl_actor()
 {
   TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -181,7 +152,6 @@ static void start()
   bbrd.distance = 0;
   speedctrl_start();
   bbrd.rspeed = 4.0;
-  //speedctrl_speedup(bbrd.ispeed, bbrd.rspeed);
   buzzer_beep_START();
 }
 
@@ -204,10 +174,7 @@ static void stop()
 
 static void keypad_reader(void * pvParameter)
 {
-  //TaskHandle_t stopTask = NULL;
   uint8_t  keypad_value;
-  //SpdCtrlRec_t request = {0, 5};
-  //  BaseType_t xResult;
   UBaseType_t uxHighWaterMark;
   while (1){
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY); //clear on exit, wait forever
@@ -220,16 +187,14 @@ static void keypad_reader(void * pvParameter)
 
     // ON / OFF
     if (keypad_value & 0x80){
-      if (bbrd._switch == PAUSE){
-	bbrd.start += xTaskGetTickCount() - bbrd.pause_start;
-	bbrd.rspeed = (bbrd.rspeed_backup > 6) ? 6 : bbrd.rspeed_backup;
-	//speedctrl_speedup(bbrd.ispeed, bbrd.rspeed);
-	bbrd.slope = bbrd.slope_backup;
-	bbrd._switch = ON;
-	speedctrl_start();
-	continue;
-      }
-      
+     //if (bbrd._switch == PAUSE){
+     //bbrd.start += xTaskGetTickCount() - bbrd.pause_start;
+     //bbrd.rspeed = (bbrd.rspeed_backup > 6) ? 6 : bbrd.rspeed_backup;
+     //bbrd.slope = bbrd.slope_backup;
+     //bbrd._switch = ON;
+     //speedctrl_start();
+     //continue;
+     //}
       //
       bbrd._switch = (bbrd._switch == OFF) ? ON : OFF;
       buzzer_beep_keyOK();
@@ -247,7 +212,7 @@ static void keypad_reader(void * pvParameter)
       buzzer_beep_keyOK();
       if (bbrd._switch == ON){
 	bbrd.start += xTaskGetTickCount() - bbrd.pause_start;
-	bbrd.rspeed = bbrd.rspeed_backup;
+	bbrd.rspeed = (bbrd.rspeed_backup > 6) ? 6 : bbrd.rspeed_backup;
 	//speedctrl_speedup(bbrd.ispeed, bbrd.rspeed);
 	bbrd.slope = bbrd.slope_backup;
 	
