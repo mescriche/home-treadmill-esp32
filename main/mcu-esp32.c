@@ -206,7 +206,7 @@ static void keypad_reader(void * pvParameter)
 {
   //TaskHandle_t stopTask = NULL;
   uint8_t  keypad_value;
-  SpdCtrlRec_t request = {0, 5};
+  //SpdCtrlRec_t request = {0, 5};
   //  BaseType_t xResult;
   UBaseType_t uxHighWaterMark;
   while (1){
@@ -222,7 +222,7 @@ static void keypad_reader(void * pvParameter)
     if (keypad_value & 0x80){
       if (bbrd._switch == PAUSE){
 	bbrd.start += xTaskGetTickCount() - bbrd.pause_start;
-	bbrd.rspeed = bbrd.rspeed_backup;
+	bbrd.rspeed = (bbrd.rspeed_backup > 6) ? 6 : bbrd.rspeed_backup;
 	//speedctrl_speedup(bbrd.ispeed, bbrd.rspeed);
 	bbrd.slope = bbrd.slope_backup;
 	bbrd._switch = ON;
@@ -285,12 +285,6 @@ static void keypad_reader(void * pvParameter)
     else if ((keypad_value & 0x10) && (bbrd.rspeed <= (MAX_SPEED - 0.1)))  bbrd.rspeed += 0.1;//SPD+
     else if ((keypad_value & 0x20) && (bbrd.rspeed <= (MAX_SPEED - 1))) ++bbrd.rspeed;//SPD++
 
-    if (rspeed != bbrd.rspeed){
-      request.rspeed = bbrd.rspeed;
-      request.duration = 10;
-      //speedctrl_put(&request);
-    }
-    
     void (*beeper)();    
     if ((rspeed != bbrd.rspeed) || (slope != bbrd.slope)) {
       beeper = &buzzer_beep_keyOK;
