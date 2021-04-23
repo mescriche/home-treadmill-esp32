@@ -69,7 +69,7 @@ void display_init(const color_t* fg, const color_t *bg)
 {
   _fg = color565(fg);
   _bg = color565(bg);
-  display_clear();
+  display_clear(bg);
   setFont(DF12PT);
   //  font.id=DF12PT; font.pbook=pfont12; font.y_size=12;
 }
@@ -197,36 +197,49 @@ void displayStringOnFrame(Frame_t f,const char* ptr, const color_t* fg)
   displayPString(p, ptr, fg);
 }
 
-void displayHLine(Pos_t p, uint16_t length)
+void displayGraphOnFrame(Frame_t f, uint32_t begin, uint32_t end, const float* ptr, const color_t* fg)
+{
+  Pos_t p = f.pos;
+  clearFrame(f);
+  uint size = end-begin;
+  for(uint i=0; i<size; i++){
+    displayVLine(p, ptr[begin+i], fg);
+    p.x++;
+  }
+}
+
+void displayHLine(Pos_t p, uint16_t length, const color_t* fg)
 {
   uint16_t data[length]; //black
-  for (int i=0; i<length; i++) data[i] = 0x0000;
+  uint16_t color = color565(fg);
+  for (int i=0; i<length; i++) data[i] = color;
   display_data(p.x, p.y, length, 1, data);
 }
 
-void displayHUFrame(Frame_t f)
+void displayHUFrame(Frame_t f, const color_t* fg)
 {
   Pos_t p = {f.pos.x, f.pos.y+1};
-  displayHLine(p, f.width);
+  displayHLine(p, f.width, fg);
 }
-void displayHBFrame(Frame_t f)
+void displayHBFrame(Frame_t f, const color_t* fg)
 {
   Pos_t p = {f.pos.x, f.pos.y-1 + f.height};
-  displayHLine(p,f.width);
+  displayHLine(p,f.width, fg);
 }
 
-void displayVLine(Pos_t p, uint16_t length)
+void displayVLine(Pos_t p, uint16_t length, const color_t* fg)
 {
-  uint16_t data = 0x0000;
+  //  uint16_t data = 0x0000;
+  uint16_t data = color565(fg);
   for(int i=0; i<length; i++)
     display_data(p.x, p.y+i, 1, 1, &data);
 }
 
-void displayFrame(Frame_t f)
+void displayFrame(Frame_t f, const color_t* fg)
 {
   const uint16_t ncols = f.width;
   const uint16_t nrows = f.height;
-  const uint16_t color = 0x0000; // black
+  const uint16_t color = color565(fg);
   uint16_t data[ncols]; // columns
   for (int i=0; i<ncols; i++) data[i] = color;
   display_data(f.pos.x, f.pos.y, ncols, 1, data);
@@ -235,16 +248,15 @@ void displayFrame(Frame_t f)
     display_data(f.pos.x, f.pos.y+i, 1, 1, data);
     display_data(f.pos.x+f.width-1, f.pos.y+i, 1, 1,data);
   }
-  
 }
 
-void display_clear()
+void display_clear(const color_t* fg)
 {
   const uint16_t nrows = 128;
   const uint16_t ncols = 160;
-  const uint16_t white = 0xFFFF; // white
+  const uint16_t color = color565(fg);
   uint16_t data[ncols]; // columns
-  for (int i=0; i<ncols; i++) data[i] = white;
+  for (int i=0; i<ncols; i++) data[i] = color;
   for (int i=0; i<nrows; i++) // rows
     display_data(0, i, ncols, 1, data);
 }

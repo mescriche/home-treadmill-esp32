@@ -1,5 +1,6 @@
 #define MAX_SPEED 12
 #define MAX_SLOPE 10
+#define PAUSE_MAX 300 // segundos = 5m * 60s = 300 
 
 #define BLUE_LED GPIO_NUM_2
 
@@ -27,6 +28,9 @@
 
 #define RX2 GPIO_NUM_16
 #define TX2 GPIO_NUM_17
+
+#define MAX_TIME 120 // SPEED RECORD TIME = 2 hours = 120 minutes
+
 // Inicio -> OFF_STOPPED (switch=OFF, ispeed=0) 
 // OFF_STOPPED -> ON_READY (switch=ON, ispeed=0) event: switch change 
 // ON_READY -> ON_RUNNING (switch=ON, ispeed > 0) event: ispeed increase
@@ -34,22 +38,35 @@
 // ON_RUNNING -> OFF_STOPPING (switch=OFF, ispeed > 0) event: switch change
 // OFF_STOPPING -> OFF_READY (switch=OFF, ispeed = 0) event: ispeed became NULL
 
-enum Status {ON_READY, ON_RUNNING, ON_PAUSE, OFF_STOPPING, OFF_STOPPED};
-enum Switch {OFF=0, ON=1, PAUSE};
+enum Status {ON_READY, ON_RUNNING, OFF_STOPPING, OFF_STOPPED}; // engine status
+enum Mode {WELCOME, CONF, RUN, PAUSE, REPORT};
+
+typedef struct {
+  float speed;
+  TickType_t timetick;
+} ISpeedRecord;
+
+typedef struct {
+  uint32_t min;
+  uint16_t sec;
+} Time;
 
 typedef struct {
   enum Status status;
-  enum Switch _switch;
+  enum Mode mode;
   float rspeed, rspeed_backup; // reference speed
   float ispeed; // instant speed
+  TickType_t ispeed_timetick;
   uint32_t slope, slope_backup; // reference slope
   uint32_t duration; 
   uint32_t nsteps;
   float distance;
-  TickType_t start, end;
-  TickType_t pause, pause_start, pause_end;
+  TickType_t start, session_begin, session_end;
+  TickType_t pause_begin, pause_end, pause_duration;
   float aspeed; // average speed
-  float temperature, humidity; 
+  float temperature, humidity;
+  int16_t programId;
+  float race[MAX_TIME]; //
 } Blackboard;
 
 typedef struct {
@@ -61,4 +78,9 @@ typedef struct {
   SlopeCtrl_t slopectrl;
   AmbSensor_t ambsensor;
 } Platform;
+
+
+
+
+
 

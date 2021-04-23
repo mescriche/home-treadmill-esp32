@@ -15,9 +15,10 @@ static void speedmeter_intr_handler(void *arg)
   ret = pcnt_get_event_status(self->unit, &status);
   //  ESP_ERROR_CHECK(ret);
   if (status & PCNT_EVT_ZERO){
-    measurement.timestamp = xTaskGetTickCount();
+    measurement.timetick = xTaskGetTickCount();
     measurement.nstep = PCNT_H_LIM_VAL;
-    xQueueSendFromISR(speedmeter_xMailbox, &measurement, &xHigherPriorityTaskWoken);
+    xQueueSendFromISR(speedmeter_xMailbox, &measurement,
+		      &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
   }
 }

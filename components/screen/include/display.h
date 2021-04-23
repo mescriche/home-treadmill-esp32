@@ -24,32 +24,33 @@ void display_init(const color_t* fg, const color_t* bg);
 uint8_t setFont(uint8_t id);
 void displayPString(Pos_t p,const char* ptr, const color_t* fg);
 void displayStringOnFrame(Frame_t f,const char* ptr, const color_t* fg);
-void displayFrame(Frame_t f);
-void displayHLine(Pos_t p, uint16_t length);
-void displayVLine(Pos_t p, uint16_t length);
-void displayHBFrame(Frame_t f);
-void displayHUFrame(Frame_t f);
-void display_clear();
+void displayGraphOnFrame(Frame_t f, uint32_t begin, uint32_t end, const float* ptr, const color_t* fg);
+void displayFrame(Frame_t f, const color_t* fg);
+void displayHLine(Pos_t p, uint16_t length, const color_t* fg);
+void displayVLine(Pos_t p, uint16_t length, const color_t* fg);
+void displayHBFrame(Frame_t f, const color_t* fg);
+void displayHUFrame(Frame_t f, const color_t* fg);
+void display_clear(const color_t* fg);
 uint16_t color565(const color_t *color);
 
 
 // ==== Color definitions constants ==============
-/* const color_t black; */
-/* const color_t navy; */
-/* const color_t darkgreen; */
-/* const color_t darkcyan; */
-/* const color_t maroon; */
-/* const color_t purple; */
-/* const color_t olive; */
-/* const color_t lightgrey; */
-/* const color_t darkgrey; */
-/* const color_t blue; */
-/* const color_t green; */
-/* const color_t cyan; */
-/* const color_t red; */
-/* const color_t magenta; */
-/* const color_t yellow; */
-/* const color_t white; */
-/* const color_t orange; */
-/* const color_t greenyellow; */
-/* const color_t pink; */
+const color_t black;
+const color_t navy;
+const color_t darkgreen;
+const color_t darkcyan;
+const color_t maroon;
+const color_t purple;
+const color_t olive;
+const color_t lightgrey;
+const color_t darkgrey;
+const color_t blue;
+const color_t green;
+const color_t cyan;
+const color_t red;
+const color_t magenta;
+const color_t yellow;
+const color_t white;
+const color_t orange;
+const color_t greenyellow;
+const color_t pink;

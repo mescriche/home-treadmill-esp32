@@ -7,7 +7,8 @@ typedef struct {
   gpio_num_t mspd_pin; //speed minus pin
   gpio_num_t sw; //stop/walk = switch
   uint8_t max_speed;
-  TaskHandle_t worker;
+  TaskHandle_t controller;
+  TaskHandle_t admin;
 } SpeedCtrl_t;
 
 
@@ -21,6 +22,7 @@ void speedctrl_do(float rspeed, float ispeed);
 void speedctrl_start();
 void speedctrl_slowdown(float ispeed);
 void speedctrl_stop();
+
 void speedctrl_put(SpdCtrlRec_t* rq); 
 BaseType_t speedctrl_get(SpdCtrlRec_t* rq);
 /* BaseType_t speedctrl_speedup(float origin, float target); */

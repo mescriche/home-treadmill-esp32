@@ -7,14 +7,14 @@
 
 static SpeedCtrl_t* pself;
 static const char *TAG = "SPDCTRL";
-static QueueHandle_t rspeed_queue;
+//static QueueHandle_t rspeed_queue;
 const float speed_threshold = 0.5;
 
 void speedctrl_init(SpeedCtrl_t* self)
 {
   pself = self;
-  rspeed_queue = xQueueCreate(50, sizeof(SpdCtrlRec_t));
-  configASSERT(rspeed_queue != NULL);
+  /* rspeed_queue = xQueueCreate(50, sizeof(SpdCtrlRec_t)); */
+  /* configASSERT(rspeed_queue != NULL); */
   //
   gpio_reset_pin(self->sw);
   gpio_set_direction(self->sw, GPIO_MODE_OUTPUT);
@@ -79,18 +79,18 @@ void speedctrl_do(float rspeed, float ispeed)
   }
 }
 
-void speedctrl_put(SpdCtrlRec_t* req_ptr)
-{
-  ESP_LOGI(TAG, "SPEEDCTRL :: QUEUE request={%.1f,%d }", req_ptr->rspeed, req_ptr->duration);
-  xQueueSend(rspeed_queue, req_ptr, pdMS_TO_TICKS(500));
-}
+/* void speedctrl_put(SpdCtrlRec_t* req_ptr) */
+/* { */
+/*   ESP_LOGI(TAG, "SPEEDCTRL :: QUEUE request={%.1f,%d }", req_ptr->rspeed, req_ptr->duration); */
+/*   xQueueSend(rspeed_queue, req_ptr, pdMS_TO_TICKS(500)); */
+/* } */
 
-BaseType_t speedctrl_get(SpdCtrlRec_t* req_ptr)
-{
-   BaseType_t xResult;
-   xResult = xQueueReceive(rspeed_queue, req_ptr, 0); // no wait
-   return xResult;
-}
+/* BaseType_t speedctrl_get(SpdCtrlRec_t* req_ptr) */
+/* { */
+/*    BaseType_t xResult; */
+/*    xResult = xQueueReceive(rspeed_queue, req_ptr, 0); // no wait */
+/*    return xResult; */
+/* } */
 
 /*   //                       speed     0, 1,  2,  3,  4,  5,  6,   7,  */
 /* const  uint32_t speedup_time[]  = {1, 2,  4,  5, 15, 30, 60,  120}; */

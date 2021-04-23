@@ -12,6 +12,7 @@
 #include "esp_timer.h"
 #include "esp_sleep.h"
 #include "esp_log.h"
+
 #include "ambsensor.h"
 #include "speedctrl.h"
 #include "speedmeter.h"
@@ -19,6 +20,7 @@
 #include "buzzer.h"
 #include "screen.h"
 #include "keypad.h"
+#include "session.h"
 #include "mcu-esp32.h"
 
 
@@ -33,14 +35,18 @@
 //#define TEST_PIN KB_SPDP
 //#define GREEN_LED TM_SPDP
 
+
 const char *TAG = "HT";
 
-QueueHandle_t rspeed_queue;
+QueueHandle_t ispeed_track;
 
-Blackboard bbrd = {._switch = OFF, .status = OFF_STOPPED,
+Blackboard bbrd = {.mode = WELCOME, .status = OFF_STOPPED,
   .temperature = 0.0, .humidity = 0.0,
   .rspeed = 0.0, .ispeed = 0.0, .aspeed = 0.0,
-  .slope = 0,    .distance = 0, .duration = 0};
+  .slope = 0,    .distance = 0, .duration = 0,
+  .pause_duration = 0, 
+  .programId = -1
+};
 
 Platform pltfrm = {
   .buzzer =     {.pin = BUZZER },
@@ -52,10 +58,49 @@ Platform pltfrm = {
   .ambsensor =  {.i2c_sda=I2C_SDA, .i2c_scl=I2C_SCL}
 };
 
+Time ticks_to_time(TickType_t ticks)
+{
+  Time data;
+  uint lapse = ticks / 100;
+  data.min = lapse / 60;
+  data.sec = lapse - (data.min * 60);
+  return data;
+}
+
+static void start()
+{
+  //bbrd.mode = RUN;
+  bbrd.nsteps = 0;
+  bbrd.session_begin = xTaskGetTickCount();
+  bbrd.start = bbrd.session_begin;
+  bbrd.duration = 0;
+  bbrd.distance = 0;
+  bbrd.pause_duration = 0;
+  speedctrl_start();
+  if ((bbrd.programId < 0) || (session_load_program(bbrd.programId) == pdFALSE)) bbrd.rspeed = 4.0;
+  buzzer_beep_START();
+  //xTaskNotify(pltfrm.speedctrl.admin, pdTRUE, eSetValueWithOverwrite);
+}
+
+static void stop(void *pvParameter)
+{
+  //xTaskNotify(pltfrm.speedctrl.admin, pdFALSE, eSetValueWithOverwrite);
+  //bbrd.mode = REPORT;
+  bbrd.rspeed = 0;
+  bbrd.slope = 0;
+  while(bbrd.ispeed > 2.0) vTaskDelay(pdMS_TO_TICKS(1000));
+  speedctrl_stop();
+  slopectrl_stop();
+  bbrd.session_end = xTaskGetTickCount();
+  bbrd.duration = (bbrd.session_end - bbrd.session_begin - bbrd.pause_duration)/100;
+  bbrd.aspeed = 3.6 * bbrd.distance / bbrd.duration; // Km/h
+  vTaskDelay(pdMS_TO_TICKS(2000));
+  buzzer_beep_STOP();
+}
 
 static void ambsensor_updater(void *pvParameter)
 {
-  static float temperature, humidity;
+  float temperature, humidity;
   //UBaseType_t uxHighWaterMark;
   TickType_t xLastWakeTime =  xTaskGetTickCount();
   vTaskDelay(pdMS_TO_TICKS(5000));
@@ -64,7 +109,6 @@ static void ambsensor_updater(void *pvParameter)
 	bbrd.temperature = temperature;
 	bbrd.humidity = humidity;
     };
-
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "AMBSENSOR :: watermark=%d", uxHighWaterMark);
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(5000));
@@ -74,17 +118,31 @@ static void ambsensor_updater(void *pvParameter)
 static void screen_updater(void *pvParameter)
 {
   TickType_t xLastWakeTime =  xTaskGetTickCount();
+  Time begin, end;
   //UBaseType_t uxHighWaterMark;
   while(1){
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
-    //ESP_LOGI(TAG, "SCREEN :: watermark=%d", uxHighWaterMark);
-    show_status(bbrd.status);
-    show_speed(bbrd.rspeed, bbrd.ispeed);
-    show_slope(bbrd.slope);
-    show_duration(bbrd.duration);
-    show_distance(bbrd.distance);
-    show_aspeed(bbrd.aspeed);
-    show_ambsensor(bbrd.temperature, bbrd.humidity);
+    //ESP_LOGI(TAG, "SCREEN :: watermark=%d", uxHighWaterMark);    
+    switch(bbrd.mode){
+    case CONF:
+      show_configuration_screen();
+      break;
+    case RUN:
+      show_run_screen(bbrd.status, bbrd.rspeed, bbrd.ispeed, bbrd.aspeed,
+		      bbrd.slope, bbrd.distance, bbrd.duration,
+		      bbrd.temperature, bbrd.humidity);
+      break;
+    case PAUSE:
+      show_pause_screen(bbrd.pause_end -  bbrd.pause_begin);
+      break;
+    case REPORT:
+      begin = ticks_to_time(bbrd.session_begin);
+      end = ticks_to_time(bbrd.session_end);
+      show_report_screen(bbrd.status, bbrd.aspeed, bbrd.distance, bbrd.duration,
+			 begin.min, end.min, bbrd.race);
+      break;
+    default: show_welcome_screen();
+    };
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
   }
 }
@@ -97,12 +155,52 @@ static void speedctrl_actor(void* pvParameter)
   while(1){
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "SPEEDCTRL :: watermark=%d", uxHighWaterMark);
-    if (bbrd._switch != OFF)
-      speedctrl_do(bbrd.rspeed, bbrd.ispeed);
-    else speedctrl_slowdown(bbrd.ispeed);
+    switch (bbrd.mode){
+    case RUN: speedctrl_do(bbrd.rspeed, bbrd.ispeed); break;
+    case PAUSE:
+      if (bbrd.ispeed > 3) speedctrl_do(3, bbrd.ispeed);
+      else speedctrl_slowdown(bbrd.ispeed);
+      break;
+    default: speedctrl_slowdown(bbrd.ispeed); 
+    };
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(100));
   }
 }
+
+static void speed_admin(void* pvParameter)
+{
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  TickType_t deadline=0;
+  Order  order;
+  while (1) {
+    switch (bbrd.mode){
+    case RUN:
+      if ( xLastWakeTime > deadline){
+	session_get_order(&order);  // wait forever
+	if (order.speed == 0){
+	  bbrd.mode = REPORT;
+	  xTaskCreatePinnedToCore(stop, "stop", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
+	  //stop();
+	} else {
+	  bbrd.rspeed = order.speed;
+	  bbrd.slope = order.slope;
+	  deadline = xLastWakeTime + order.duration * 60 * 100; // ticks
+	}
+	buzzer_beep_RSPEED();
+      }
+      break;
+    case PAUSE:
+      deadline += 100; // added 1 second for each loop step
+      break;
+    default: deadline = 0;
+    };
+    
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
+     
+    //vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(order.duration * 60 * 100))
+  }
+}
+    // ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
 /* static void speedctrl_req_actor(void * pvParameter) */
 /* { */
@@ -140,8 +238,10 @@ static void slopectrl_actor()
   while(1){
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "SLOPE :: watermark=%d", uxHighWaterMark);
-    if (bbrd._switch == ON) slopectrl_do(bbrd.slope);
-    else slopectrl_getdown();
+    switch (bbrd.mode){
+    case RUN: slopectrl_do(bbrd.slope); break;
+    default: slopectrl_getdown();
+    };
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(5000)); // 14 seconds is minimum time
   }
 }
@@ -153,152 +253,176 @@ static void speedmeter_updater(void* pvParameter)
   //UBaseType_t uxHighWaterMark;
   SpeedRecord_t spd_rec;
   float distance, time_delta, speed;
-  TickType_t timestamp = xTaskGetTickCount();
+  TickType_t timetick = xTaskGetTickCount();
+  ISpeedRecord ispeed;
   while(1){
-    xResult = speedmeter_read(&spd_rec);
+    xResult = speedmeter_read(&spd_rec); // waits 3 seconds to assert 0 speed
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "SPEEDMETER :: watermark=%d", uxHighWaterMark);
     if ( xResult == pdPASS) {
       distance = step * spd_rec.nstep; // meters
-      time_delta = (spd_rec.timestamp - timestamp)/100.0; // seconds
+      time_delta = (spd_rec.timetick - timetick)/100.0; // seconds
       speed = distance / time_delta;
-      bbrd.ispeed = 3.6 * speed;
+      ispeed.speed = 3.6 * speed;
+      ispeed.timetick = spd_rec.timetick;
       bbrd.nsteps += spd_rec.nstep;
       bbrd.distance = step * (bbrd.nsteps);
       //ESP_LOGI(TAG, "SPEEDMETER:: speed=%f, steps=%d, time_delta=%f", 3.6*speed, spd_rec.nstep, time_delta); 
-      timestamp = spd_rec.timestamp;
-    } else bbrd.ispeed = 0;
+      timetick = spd_rec.timetick;
+    } else {
+      ispeed.speed = 0;
+      timetick =  xTaskGetTickCount();
+      ispeed.timetick = timetick;
+    }
+    bbrd.ispeed = ispeed.speed;
+    bbrd.ispeed_timetick = ispeed.timetick;
+    xQueueSend(ispeed_track, &ispeed, pdMS_TO_TICKS(50)); // Tmin = 62 ms for fmax = 16Hz
   }
 }
 
+static void ispeed_recorder(TickType_t start, TickType_t now)
+{
+  static float ispeed_book[60]; // 60 seconds
+  static ISpeedRecord ispeed, ispeed_prev = {0,0};
+  Time ptime, etime;
+  uint16_t nsec;
+  float av_speed, speed_delta = 0;
+  uint32_t delta, delta_sum = 0;
+  uint32_t nmin;
+  
+  ptime = ticks_to_time(now - start);
+  nsec = (ptime.sec == 0) ? 59 : ptime.sec - 1;
+
+  //ESP_LOGI(TAG, "ptime[mm:ss]=%02u:%02u, nsec=%02u", ptime.min, ptime.sec, nsec);
+  bool loop;
+  do {
+    loop = false;
+    if (xQueuePeek(ispeed_track, &ispeed, 0)){
+      etime = ticks_to_time(ispeed.timetick - start);
+      //	ESP_LOGI(TAG, "etime[mm:ss]=%02u:%02u", etime.min, etime.sec);
+      if ( nsec >= etime.sec ){
+	xQueueReceive(ispeed_track, &ispeed, 0);
+	if (nsec == etime.sec){
+	  delta = ispeed.timetick - ispeed_prev.timetick;
+	  /* ESP_LOGI(TAG, "ispeed=%.1f, tick=%d, delta=%d, %02u:%02u", */
+	  /* 	     ispeed.speed, ispeed.timetick, delta, */
+	  /* 	     etime.min, etime.sec); */
+	  speed_delta += ispeed.speed * delta;
+	  delta_sum += delta;
+	} 
+	ispeed_prev = ispeed;
+	loop = true;
+      }
+    }
+  } while (loop);
+  if (delta_sum > 0) av_speed = speed_delta / (float) delta_sum;
+  else av_speed = 0;
+  ispeed_book[nsec] = av_speed;
+  /* ESP_LOGI(TAG, "ispeed[%d]=%.1f",nsec,ispeed_book[nsec]); */
+  
+  if (nsec == 59){
+    av_speed = 0;
+    for(uint16_t i=0; i<60; i++) av_speed += ispeed_book[i];
+    nmin = ptime.min - (ptime.min / MAX_TIME ) * MAX_TIME;
+    nmin =  (nmin == 0) ? MAX_TIME-1 : nmin -1;
+    bbrd.race[nmin] = av_speed/60.0;
+    ESP_LOGI(TAG, "ptime[mm:ss]= %02u:%02u, race[%d]=%.1f", ptime.min, ptime.sec, nmin, bbrd.race[nmin]);
+  }
+}
+
+
 extern bool keypad_read(uint8_t* value);
-
-static void start()
-{
-  bbrd.nsteps = 0;
-  bbrd.start = xTaskGetTickCount();
-  bbrd.duration = 0;
-  bbrd.distance = 0;
-  speedctrl_start();
-  bbrd.rspeed = 4.0;
-  //speedctrl_speedup(bbrd.ispeed, bbrd.rspeed);
-  buzzer_beep_START();
-}
-
-static void stop()
-{
-  bbrd.rspeed = 0;
-  //speedctrl_slowdown(bbrd.ispeed, 0);
-  //xTaskNotify(pltfrm.speedctrl.worker, pdTRUE, eSetValueWithOverwrite);
-  while(bbrd.ispeed > 2.0) vTaskDelay(pdMS_TO_TICKS(1000));
-  speedctrl_stop();
-  //
-  bbrd.slope = 0;
-  slopectrl_stop();
-  bbrd.end = xTaskGetTickCount();
-  bbrd.duration = (bbrd.end - bbrd.start)/100;
-  bbrd.aspeed = 3.6 * bbrd.distance / bbrd.duration; // Km/h
-  vTaskDelay(pdMS_TO_TICKS(2000));
-  buzzer_beep_STOP();
-}
 
 static void keypad_reader(void * pvParameter)
 {
-  //TaskHandle_t stopTask = NULL;
   uint8_t  keypad_value;
-  SpdCtrlRec_t request = {0, 5};
   //  BaseType_t xResult;
-  UBaseType_t uxHighWaterMark;
+  //UBaseType_t uxHighWaterMark;
   while (1){
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY); //clear on exit, wait forever
 
-    uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
-    ESP_LOGI(TAG, "KEYPAD :: watermark=%d", uxHighWaterMark);
-    
+    //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
+    //ESP_LOGI(TAG, "KEYPAD :: watermark=%d", uxHighWaterMark);
     if (keypad_read(&keypad_value) != pdTRUE ) continue;
-    ESP_LOGI(TAG, "KEYPAD :: KEYCODE %X",  keypad_value & 0xFF);
-
-    // ON / OFF
-    if (keypad_value & 0x80){
-      if (bbrd._switch == PAUSE){
-	bbrd.start += xTaskGetTickCount() - bbrd.pause_start;
-	bbrd.rspeed = bbrd.rspeed_backup;
-	//speedctrl_speedup(bbrd.ispeed, bbrd.rspeed);
-	bbrd.slope = bbrd.slope_backup;
-	bbrd._switch = ON;
-	speedctrl_start();
-	continue;
+    //ESP_LOGI(TAG, "KEYPAD :: KEYCODE %X",  keypad_value & 0xFF);
+ 
+    bool beep = true;
+    switch (bbrd.mode){
+    case WELCOME:
+      bbrd.mode = CONF;
+      break;
+    case CONF:
+      if ((keypad_value & 0x80) && (bbrd.status == OFF_STOPPED)){
+	bbrd.mode = RUN;
+	start();
+	//	xTaskCreatePinnedToCore(start, "start", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
       }
-      
-      //
-      bbrd._switch = (bbrd._switch == OFF) ? ON : OFF;
-      buzzer_beep_keyOK();
-      if (bbrd._switch == ON) start();
-      else if (bbrd._switch == OFF) stop();
-      continue;
-    }
-    if (bbrd._switch == OFF){
-      buzzer_beep_keyFAIL();
-      continue;
-    }
-    // PAUSE
-    if (keypad_value & 0x40){
-      bbrd._switch = (bbrd._switch == ON) ? PAUSE : ON;
-      buzzer_beep_keyOK();
-      if (bbrd._switch == ON){
-	bbrd.start += xTaskGetTickCount() - bbrd.pause_start;
-	bbrd.rspeed = bbrd.rspeed_backup;
-	//speedctrl_speedup(bbrd.ispeed, bbrd.rspeed);
-	bbrd.slope = bbrd.slope_backup;
-	
-      } else if (bbrd._switch == PAUSE){
-	bbrd.pause_start = xTaskGetTickCount();
+      else if (keypad_value & 0x40) bbrd.programId = -1; // manual
+      else if (keypad_value & 0x20) bbrd.programId = 3;
+      else if (keypad_value & 0x10) bbrd.programId = 2;
+      else if (keypad_value & 0x08) bbrd.programId = 1;
+      else if (keypad_value & 0x04) bbrd.programId = 0;
+      else if (keypad_value & 0x02) {
+	uint book_size =  session_get_nPrograms();
+	if (bbrd.programId < book_size-1)  bbrd.programId++;
+      }
+      else if ((keypad_value & 0x01) && (bbrd.programId >= 0)) bbrd.programId--;
+      else beep = false;
+      break;
+    case RUN: 
+      if (keypad_value & 0x80){
+	bbrd.mode = REPORT;
+	//stop();
+	xTaskCreatePinnedToCore(stop, "stop", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
+      }
+      else if (keypad_value & 0x40) { // start PAUSE
+	bbrd.mode = PAUSE;
+	bbrd.pause_begin = xTaskGetTickCount();
 	bbrd.rspeed_backup = bbrd.rspeed;
 	bbrd.slope_backup = bbrd.slope;
 	bbrd.slope = 0;
 	bbrd.rspeed = 0;
-	/* if (speedctrl_slowdown(bbrd.ispeed, 0) == pdTRUE) */
-	/*   xTaskNotify(pltfrm.speedctrl.worker, pdTRUE, eSetValueWithOverwrite); */
-	/* else { */
-	/*   request.rspeed = 0; request.duration = 5; */
-	/*   speedctrl_put(&request); */
-	/* } */
-
-	//ESP_LOGI(TAG, "KEYPAD :: PAUSE, send NOTIFY ");
-      }      
-      continue;
-    }
-    
-    if (bbrd._switch != ON){
-      buzzer_beep_keyFAIL();
-      continue;
-    }
-    
-    float rspeed = bbrd.rspeed;
-    uint32_t slope = bbrd.slope;
-  
-    
-    if ((keypad_value & 0x04) && (bbrd.rspeed >= 1)) --bbrd.rspeed;  //SPD--
-    else if ((keypad_value & 0x08) && (bbrd.rspeed >= 0.1)) bbrd.rspeed -= 0.1; //SPD-
-    else if ((keypad_value & 0x01) && (bbrd.slope > 0)) --bbrd.slope; //INC-
-    else if ((keypad_value & 0x02) && (bbrd.slope <  MAX_SLOPE)) ++bbrd.slope; //INC+
-    else if ((keypad_value & 0x10) && (bbrd.rspeed <= (MAX_SPEED - 0.1)))  bbrd.rspeed += 0.1;//SPD+
-    else if ((keypad_value & 0x20) && (bbrd.rspeed <= (MAX_SPEED - 1))) ++bbrd.rspeed;//SPD++
-
-    if (rspeed != bbrd.rspeed){
-      request.rspeed = bbrd.rspeed;
-      request.duration = 10;
-      //speedctrl_put(&request);
-    }
-    
-    void (*beeper)();    
-    if ((rspeed != bbrd.rspeed) || (slope != bbrd.slope)) {
-      beeper = &buzzer_beep_keyOK;
-      show_speed(bbrd.rspeed, bbrd.ispeed);
-      show_slope(bbrd.slope);
-    } else beeper = &buzzer_beep_keyFAIL;
-    (*beeper)();
-    
+      }
+      else if ((keypad_value & 0x20) && (bbrd.rspeed <= (MAX_SPEED - 1))) ++bbrd.rspeed;//SPD++      
+      else if ((keypad_value & 0x10) && (bbrd.rspeed <= (MAX_SPEED - 0.1)))  bbrd.rspeed += 0.1;//SPD+
+      else if ((keypad_value & 0x08) && (bbrd.rspeed >= 0.1)) bbrd.rspeed -= 0.1; //SPD-
+      else if ((keypad_value & 0x04) && (bbrd.rspeed >= 1)) --bbrd.rspeed;  //SPD--      
+      else if ((keypad_value & 0x02) && (bbrd.slope <  MAX_SLOPE)) ++bbrd.slope; //INC+      
+      else if ((keypad_value & 0x01) && (bbrd.slope > 0)) --bbrd.slope; //INC-
+      else beep = false;
+      // show_speed(bbrd.rspeed, bbrd.ispeed);
+      // show_slope(bbrd.slope);
+      break;
+    case PAUSE:
+      if (keypad_value & 0x80){
+	bbrd.mode = REPORT;
+	//stop();
+	xTaskCreatePinnedToCore(stop, "stop", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
+      }
+      else if ((keypad_value & 0x40) && (bbrd.status == OFF_STOPPED))  { // end PAUSE
+	bbrd.mode = RUN;
+	bbrd.pause_end = xTaskGetTickCount();
+	bbrd.pause_duration += bbrd.pause_end - bbrd.pause_begin;
+	bbrd.rspeed = (bbrd.rspeed_backup > 6) ? 6 : bbrd.rspeed_backup;
+	bbrd.slope = bbrd.slope_backup;
+      }
+      else beep = false;
+      break;
+    case REPORT:
+      if ((keypad_value & 0x80) && (bbrd.status == OFF_STOPPED)){
+	bbrd.mode = RUN;
+	start();
+	//	xTaskCreatePinnedToCore(start, "start", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
+      }
+      else if ((keypad_value & 0x40) && (bbrd.status == OFF_STOPPED)) {
+	  bbrd.mode = CONF;
+	}
+      else beep = false;
+      break;
+    };
+    //
+    if (beep) buzzer_beep_keyOK();
+    else buzzer_beep_keyFAIL();
   }
 }
 
@@ -307,13 +431,17 @@ extern void heart_beat(void *arg);
 
 void app_main()
 {
-
   BaseType_t xResult;
-  UBaseType_t uxHighWaterMark;
+  TickType_t   xLastWakeTime, now;
+  bbrd.start =  xTaskGetTickCount();
+  session_init();
+  bbrd.programId = 0;
+  //UBaseType_t uxHighWaterMark;
+  ispeed_track = xQueueCreate(25, sizeof(ISpeedRecord));
   //
   buzzer_init(&pltfrm.buzzer);
-  uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
-  ESP_LOGI(TAG, "HELLO WORLD!! :: watermark=%d", uxHighWaterMark);
+  //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
+  //ESP_LOGI(TAG, "HELLO WORLD!! :: watermark=%d", uxHighWaterMark);
   //
   keypad_init(&pltfrm.keypad);
   xResult = xTaskCreatePinnedToCore(keypad_reader, "keypad", STACK_SIZE + 1024, NULL, 10, &pltfrm.keypad.reader, PRO_CPU);
@@ -321,7 +449,7 @@ void app_main()
   //
   buzzer_beep_HELLO();
   screen_init(&pltfrm.screen);
-  show_message(WELCOME);
+  //show_message(WELCOME);
   vTaskDelay(pdMS_TO_TICKS(2000)); // await a few seconds to display welcome
   //
   xResult = xTaskCreatePinnedToCore(screen_updater, "screen", STACK_SIZE, NULL, 4, &pltfrm.screen.updater, APP_CPU);
@@ -332,12 +460,11 @@ void app_main()
   xResult = xTaskCreatePinnedToCore(speedmeter_updater, "speedmeter", STACK_SIZE, NULL, 8, &pltfrm.speedmeter.updater, PRO_CPU);
   configASSERT(xResult == pdPASS);
   //
-  //xResult = xTaskCreate(heart_beat, "heart_beat", STACK_SIZE, (void*)GPIO_NUM_16, 8, NULL);
-  //configASSERT(xResult == pdPASS);
-  //
   vTaskDelay(pdMS_TO_TICKS(1000));
   speedctrl_init(&pltfrm.speedctrl);
-  xResult = xTaskCreatePinnedToCore(speedctrl_actor, "speedctrl", STACK_SIZE + 1024, NULL, 7, &pltfrm.speedctrl.worker, PRO_CPU);
+  xResult = xTaskCreatePinnedToCore(speedctrl_actor, "speedctrl", STACK_SIZE, NULL, 7, &pltfrm.speedctrl.controller, PRO_CPU);
+  configASSERT(xResult == pdPASS);
+  xResult = xTaskCreatePinnedToCore(speed_admin, "speedadmin", STACK_SIZE, NULL, 7, &pltfrm.speedctrl.admin, PRO_CPU);
   configASSERT(xResult == pdPASS);
   //
   slopectrl_init(&pltfrm.slopectrl);
@@ -352,30 +479,50 @@ void app_main()
   //xResult = xTaskCreatePinnedToCore(stats_task, "stats", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
   //configASSERT(xResult == pdPASS);
   //
-  bbrd.start = xTaskGetTickCount();
-  TickType_t xLastWakeTime =  xTaskGetTickCount();
-  TickType_t now;
+  //  bbrd.session_begin = xTaskGetTickCount();
+  xLastWakeTime =  xTaskGetTickCount();
+  Time work_time;
   //UBaseType_t uxHighWaterMark;
   while (1){
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "MAIN :: watermark=%d", uxHighWaterMark);
-    now = xTaskGetTickCount();
-    if (bbrd._switch == ON){
-      bbrd.duration = (now - bbrd.start)/100;
-      bbrd.status = (bbrd.ispeed > 0) ? ON_RUNNING: ON_READY;
-    }
-    else if (bbrd._switch == OFF)
+    now = xLastWakeTime;
+
+
+    switch (bbrd.mode){
+    case WELCOME:
+      if (now > bbrd.start + pdMS_TO_TICKS(5000)) bbrd.mode = CONF;
+      break;
+    case CONF:
       bbrd.status = (bbrd.ispeed > 0) ? OFF_STOPPING : OFF_STOPPED;
-    else if (bbrd._switch == PAUSE){
-      bbrd.status = ON_PAUSE;
-      if ((now -  bbrd.pause_start)/100 > 5*3600) {
-	bbrd._switch = OFF;
-	bbrd.start += now - bbrd.pause_start;
-	stop();
+      break;
+    case RUN:
+      bbrd.duration = (now - bbrd.session_begin - bbrd.pause_duration )/100;
+      bbrd.status = (bbrd.ispeed > 0) ? ON_RUNNING : ON_READY;
+      work_time = ticks_to_time(now - bbrd.start);
+      if (work_time.min >= MAX_TIME){
+	bbrd.mode = REPORT;
+	xTaskCreatePinnedToCore(stop, "stop", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
       }
-    }
+      break;
+    case PAUSE:
+      bbrd.status = (bbrd.ispeed > 0) ? OFF_STOPPING : OFF_STOPPED;
+      bbrd.pause_end = now;
+      if (bbrd.pause_end -  bbrd.pause_begin >= PAUSE_MAX * 100){
+	bbrd.pause_duration += bbrd.pause_end - bbrd.pause_begin;
+	bbrd.mode = REPORT;
+	xTaskCreatePinnedToCore(stop, "stop", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
+      }
+      break;
+    case REPORT:
+      bbrd.status = (bbrd.ispeed > 0) ? OFF_STOPPING : OFF_STOPPED;
+      break;
+    };
+    
     if (bbrd.duration > 0)
       bbrd.aspeed =  3.6 * bbrd.distance / bbrd.duration; // Km/h
+    
+    ispeed_recorder(bbrd.start, now);
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
   }
 }
