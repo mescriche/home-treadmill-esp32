@@ -4,24 +4,25 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
-#define BOOK_SIZE 20
 typedef struct {
   float speed;
-  uint32_t duration;  
+  uint8_t duration;  
   uint8_t slope;
 } Order;
 
 typedef struct {
-  char* name;
-  float aspeed;
+  char* owner;
+  float aspeed, max_speed;
   uint32_t duration;
   Order oseq[];
 } Program;
 
-
-
 void session_init();
+void session_set_user(uint8_t userId);
+char* session_get_username();
 uint session_get_nPrograms();
 BaseType_t session_load_program(uint16_t id);
-const Program* session_get_program(uint16_t id);
-BaseType_t session_get_order();
+Program* session_get_program(uint16_t id);
+void session_get_speed_program(uint16_t id, uint8_t *prg);
+void session_get_slope_program(uint16_t id, uint8_t *prg);
+void session_get_order(Order* oPtr, Order* nPtr);

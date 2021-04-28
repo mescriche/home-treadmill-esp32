@@ -1,30 +1,68 @@
 #include "session.h"
 // {speed, duration, slope}
-Program  mev1 = {.name = "MEV20",
+
+// MANUEL HIJO
+Program  maeg1 = {
+  .owner= "MaEG",
   .oseq = { {4,2,0}, {6,2,0}, {7,2,1},
 	    {8,3,2}, {9,5,2}, {8,2,2},
 	    {6,2,1}, {4,2,0}, {0,0,0} //end token
   }
 };
 
-Program  mev2 = {.name = "MEV30",
+
+
+// MIGUEL 
+Program  mieg1 = {
+  .owner= "MiEG",
+  .oseq = { {4,2,0}, {6,2,0}, {7,2,1},
+	    {8,3,2}, {9,5,2}, {8,2,2},
+	    {6,2,1}, {4,2,0}, {0,0,0} //end token
+  }
+};
+
+
+
+// MARÍA JESÚS
+Program  mjgg1 = {
+  .owner= "MJGG",
+  .oseq = { {3,2,0}, {4,2,0}, {4.5,2,1},
+	    {5,3,2}, {5.5,5,2}, {6,2,2},
+	    {4.5,2,1}, {3,2,0}, {0,0,0} //end token
+  }
+};
+
+/// MANUEL PADRE
+Program  mev1 = {
+  .owner= "MEV",
+  .oseq = { {4,2,0}, {6,2,0}, {7,2,1},
+	    {8,3,2}, {9,5,2}, {8,2,2},
+	    {6,2,1}, {4,2,0}, {0,0,0} //end token
+  }
+};
+
+Program  mev2 = {
+  .owner = "MEV",
   .oseq = { {4,2,0}, {6,3,0}, {7,5,1},
 	    {8,5,2}, {9,5,2}, {8,5,2},
 	    {6,3,1}, {4,2,0}, {0,0,0} //end token
   }
 };
 
-Program  mev3 = {.name = "MEV45",
+Program  mev3 = {
+  .owner = "MEV",
   .oseq = { {4,2,0}, {6,3,0}, {7,5,1},
 	    {8,5,2}, {9,5,2}, {8,5,2}, {9,5,2}, {8,5,2}, {9,5,2},
 	    {6,3,1}, {4,2,0}, {0,0,0} //end token
   }
 };
 
-Program  mev4 = {.name = "MEV60",
+Program  mev4 = {
+  .owner = "MEV",
   .oseq = { {4,2,0}, {6,2,0}, {7,2,1}, {8,3,2}, // 9 min
 	    {9,5,2}, {8,5,2}, {9,5,2}, {8,5,2}, // 20 min
 	    {9,5,2}, {8,5,2}, {9,5,2}, {8,5,2}, {9,5,2},   // 25 min
 	    {7,2,1}, {6,2,1}, {4,2,0}, {0,0,0} //end token
   }
 };
+

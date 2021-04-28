@@ -24,7 +24,7 @@ void display_init(const color_t* fg, const color_t* bg);
 uint8_t setFont(uint8_t id);
 void displayPString(Pos_t p,const char* ptr, const color_t* fg);
 void displayStringOnFrame(Frame_t f,const char* ptr, const color_t* fg);
-void displayGraphOnFrame(Frame_t f, uint32_t begin, uint32_t end, const float* ptr, const color_t* fg);
+void displayGraphOnFrame(Frame_t f, uint32_t size, const uint8_t* ptr, const color_t* fg);
 void displayFrame(Frame_t f, const color_t* fg);
 void displayHLine(Pos_t p, uint16_t length, const color_t* fg);
 void displayVLine(Pos_t p, uint16_t length, const color_t* fg);

@@ -197,13 +197,12 @@ void displayStringOnFrame(Frame_t f,const char* ptr, const color_t* fg)
   displayPString(p, ptr, fg);
 }
 
-void displayGraphOnFrame(Frame_t f, uint32_t begin, uint32_t end, const float* ptr, const color_t* fg)
+void displayGraphOnFrame(Frame_t f, uint32_t size, const uint8_t* ptr, const color_t* fg)
 {
   Pos_t p = f.pos;
   clearFrame(f);
-  uint size = end-begin;
   for(uint i=0; i<size; i++){
-    displayVLine(p, ptr[begin+i], fg);
+    displayVLine(p, ptr[i], fg);
     p.x++;
   }
 }

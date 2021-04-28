@@ -40,12 +40,12 @@ const char *TAG = "HT";
 
 QueueHandle_t ispeed_track;
 
-Blackboard bbrd = {.mode = WELCOME, .status = OFF_STOPPED,
+Blackboard bbrd = {.lead = MANUAL, .mode = WELCOME, .status = OFF_STOPPED,
   .temperature = 0.0, .humidity = 0.0,
   .rspeed = 0.0, .ispeed = 0.0, .aspeed = 0.0,
   .slope = 0,    .distance = 0, .duration = 0,
   .pause_duration = 0, 
-  .programId = -1
+  .programId = 0
 };
 
 Platform pltfrm = {
@@ -118,28 +118,51 @@ static void ambsensor_updater(void *pvParameter)
 static void screen_updater(void *pvParameter)
 {
   TickType_t xLastWakeTime =  xTaskGetTickCount();
-  Time begin, end;
+  char* username;
+  Program *prgm;
+  uint8_t *speed_prgm;
+  uint8_t *slope_prgm;
   //UBaseType_t uxHighWaterMark;
   while(1){
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "SCREEN :: watermark=%d", uxHighWaterMark);    
     switch(bbrd.mode){
     case CONF:
-      show_configuration_screen();
+      if (bbrd.lead == MANUAL)
+	show_configuration_manual_screen();
+      else {
+	prgm = session_get_program(bbrd.programId);
+	speed_prgm = malloc(prgm->duration * sizeof(float));
+	slope_prgm = malloc(prgm->duration * sizeof(uint8_t));
+	session_get_speed_program(bbrd.programId, speed_prgm);
+	session_get_slope_program(bbrd.programId, slope_prgm);
+	username = session_get_username();
+	show_configuration_program_screen(username, bbrd.programId,
+					  prgm->aspeed, prgm->max_speed, prgm->duration,
+					  speed_prgm, slope_prgm);
+	free(speed_prgm);
+	free(slope_prgm);
+      }
       break;
     case RUN:
-      show_run_screen(bbrd.status, bbrd.rspeed, bbrd.ispeed, bbrd.aspeed,
+      show_run_screen(bbrd.mode, bbrd.status, bbrd.rspeed, bbrd.ispeed, bbrd.aspeed,
 		      bbrd.slope, bbrd.distance, bbrd.duration,
 		      bbrd.temperature, bbrd.humidity);
+      if (bbrd.lead != MANUAL)
+	show_lead_run_screen(bbrd.rspeed_next, bbrd.rspeed_time_left);    
       break;
     case PAUSE:
       show_pause_screen(bbrd.pause_end -  bbrd.pause_begin);
       break;
     case REPORT:
-      begin = ticks_to_time(bbrd.session_begin);
-      end = ticks_to_time(bbrd.session_end);
-      show_report_screen(bbrd.status, bbrd.aspeed, bbrd.distance, bbrd.duration,
-			 begin.min, end.min, bbrd.race);
+      if (bbrd.status == OFF_STOPPING)
+	show_run_screen(bbrd.mode, bbrd.status, bbrd.rspeed, bbrd.ispeed, bbrd.aspeed,
+			bbrd.slope, bbrd.distance, bbrd.duration,
+			bbrd.temperature, bbrd.humidity);
+      else {
+	uint32_t race_size = (bbrd.session_end - bbrd.session_begin)/100;
+	show_report_screen(bbrd.status, bbrd.aspeed, bbrd.distance, bbrd.duration, race_size, bbrd.race);
+      }
       break;
     default: show_welcome_screen();
     };
@@ -170,19 +193,21 @@ static void speedctrl_actor(void* pvParameter)
 static void speed_admin(void* pvParameter)
 {
   TickType_t xLastWakeTime = xTaskGetTickCount();
-  TickType_t deadline=0;
-  Order  order;
+  TickType_t deadline=xLastWakeTime-1;
+  Order  order, next_order;
   while (1) {
     switch (bbrd.mode){
     case RUN:
+      bbrd.rspeed_time_left = (deadline - xLastWakeTime)/100;
       if ( xLastWakeTime > deadline){
-	session_get_order(&order);  // wait forever
+	session_get_order(&order, &next_order);  // wait forever
 	if (order.speed == 0){
 	  bbrd.mode = REPORT;
 	  xTaskCreatePinnedToCore(stop, "stop", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
 	  //stop();
 	} else {
 	  bbrd.rspeed = order.speed;
+	  bbrd.rspeed_next = next_order.speed;
 	  bbrd.slope = order.slope;
 	  deadline = xLastWakeTime + order.duration * 60 * 100; // ticks
 	}
@@ -190,11 +215,10 @@ static void speed_admin(void* pvParameter)
       }
       break;
     case PAUSE:
-      deadline += 100; // added 1 second for each loop step
+      deadline += pdMS_TO_TICKS(1000); // added 1 second for each loop step
       break;
     default: deadline = 0;
     };
-    
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
      
     //vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(order.duration * 60 * 100))
@@ -343,9 +367,10 @@ static void keypad_reader(void * pvParameter)
 
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "KEYPAD :: watermark=%d", uxHighWaterMark);
+    ESP_LOGI(TAG, "Lead=%d, Mode=%d, Status=%d", bbrd.lead, bbrd.mode, bbrd.status);
     if (keypad_read(&keypad_value) != pdTRUE ) continue;
-    //ESP_LOGI(TAG, "KEYPAD :: KEYCODE %X",  keypad_value & 0xFF);
- 
+    ESP_LOGI(TAG, "KEYPAD :: KEYCODE %X",  keypad_value & 0xFF);
+
     bool beep = true;
     switch (bbrd.mode){
     case WELCOME:
@@ -357,16 +382,17 @@ static void keypad_reader(void * pvParameter)
 	start();
 	//	xTaskCreatePinnedToCore(start, "start", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
       }
-      else if (keypad_value & 0x40) bbrd.programId = -1; // manual
-      else if (keypad_value & 0x20) bbrd.programId = 3;
-      else if (keypad_value & 0x10) bbrd.programId = 2;
-      else if (keypad_value & 0x08) bbrd.programId = 1;
-      else if (keypad_value & 0x04) bbrd.programId = 0;
+      else if (keypad_value & 0x40)
+	bbrd.lead = (bbrd.lead == MANUAL) ? PROGRAMMED : MANUAL;
+      else if (keypad_value & 0x20) { session_set_user(3); bbrd.programId=0; }
+      else if (keypad_value & 0x10) { session_set_user(2); bbrd.programId=0; }
+      else if (keypad_value & 0x08) { session_set_user(1); bbrd.programId=0; }
+      else if (keypad_value & 0x04) { session_set_user(0); bbrd.programId=0; }
       else if (keypad_value & 0x02) {
-	uint book_size =  session_get_nPrograms();
-	if (bbrd.programId < book_size-1)  bbrd.programId++;
+	uint nPrograms =  session_get_nPrograms();
+	if (bbrd.programId < nPrograms-1)  bbrd.programId++;
       }
-      else if ((keypad_value & 0x01) && (bbrd.programId >= 0)) bbrd.programId--;
+      else if ((keypad_value & 0x01) && (bbrd.programId > 0)) bbrd.programId--;
       else beep = false;
       break;
     case RUN: 
@@ -487,8 +513,6 @@ void app_main()
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "MAIN :: watermark=%d", uxHighWaterMark);
     now = xLastWakeTime;
-
-
     switch (bbrd.mode){
     case WELCOME:
       if (now > bbrd.start + pdMS_TO_TICKS(5000)) bbrd.mode = CONF;

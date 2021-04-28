@@ -38,8 +38,10 @@
 // ON_RUNNING -> OFF_STOPPING (switch=OFF, ispeed > 0) event: switch change
 // OFF_STOPPING -> OFF_READY (switch=OFF, ispeed = 0) event: ispeed became NULL
 
-enum Status {ON_READY, ON_RUNNING, OFF_STOPPING, OFF_STOPPED}; // engine status
+enum Lead {MANUAL, PROGRAMMED};
 enum Mode {WELCOME, CONF, RUN, PAUSE, REPORT};
+enum Status {ON_READY, ON_RUNNING, OFF_STOPPING, OFF_STOPPED}; // engine status
+
 
 typedef struct {
   float speed;
@@ -52,9 +54,11 @@ typedef struct {
 } Time;
 
 typedef struct {
+  enum Lead lead; 
   enum Status status;
   enum Mode mode;
-  float rspeed, rspeed_backup; // reference speed
+  float rspeed, rspeed_backup, rspeed_next; // reference speed
+  uint32_t rspeed_time_left;
   float ispeed; // instant speed
   TickType_t ispeed_timetick;
   uint32_t slope, slope_backup; // reference slope
