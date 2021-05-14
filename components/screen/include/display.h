@@ -24,10 +24,17 @@ void display_init(const color_t* fg, const color_t* bg);
 uint8_t setFont(uint8_t id);
 void displayPString(Pos_t p,const char* ptr, const color_t* fg);
 void displayStringOnFrame(Frame_t f,const char* ptr, const color_t* fg);
-void displayGraphOnFrame(Frame_t f, uint32_t size, const uint8_t* ptr, const color_t* fg);
+void displayGraphOnFrame(Frame_t f, uint8_t x_scale, uint8_t y_scale, uint32_t size,
+			 const float* ptr, const color_t* fg);
+void displayHProgressBar(Frame_t f, float progress, const color_t* fg);
 void displayFrame(Frame_t f, const color_t* fg);
 void displayHLine(Pos_t p, uint16_t length, const color_t* fg);
+void displayHDashedLine(Pos_t, uint16_t length, const color_t* fg);
 void displayVLine(Pos_t p, uint16_t length, const color_t* fg);
+void displayXaxis(Pos_t p, uint16_t length, uint8_t step, const color_t* fg);
+void displayYaxis(Pos_t p, uint16_t height, uint8_t step, const color_t* fg);
+void displayGrid(Frame_t f, uint8_t x_step, uint8_t y_step, const color_t* fg);
+void displayBox(Pos_t p, uint8_t width, uint8_t height, const color_t* fg); 
 void displayHBFrame(Frame_t f, const color_t* fg);
 void displayHUFrame(Frame_t f, const color_t* fg);
 void display_clear(const color_t* fg);

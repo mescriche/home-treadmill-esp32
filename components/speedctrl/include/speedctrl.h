@@ -8,7 +8,7 @@ typedef struct {
   gpio_num_t sw; //stop/walk = switch
   uint8_t max_speed;
   TaskHandle_t controller;
-  TaskHandle_t admin;
+  TaskHandle_t leader;
 } SpeedCtrl_t;
 
 

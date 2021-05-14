@@ -1,6 +1,7 @@
 #define MAX_SPEED 12
 #define MAX_SLOPE 10
 #define PAUSE_MAX 300 // segundos = 5m * 60s = 300 
+#define MAX_TIME 120 // SPEED RECORD TIME = 2 hours = 120 minutes
 
 #define BLUE_LED GPIO_NUM_2
 
@@ -29,7 +30,7 @@
 #define RX2 GPIO_NUM_16
 #define TX2 GPIO_NUM_17
 
-#define MAX_TIME 120 // SPEED RECORD TIME = 2 hours = 120 minutes
+
 
 // Inicio -> OFF_STOPPED (switch=OFF, ispeed=0) 
 // OFF_STOPPED -> ON_READY (switch=ON, ispeed=0) event: switch change 
@@ -38,7 +39,7 @@
 // ON_RUNNING -> OFF_STOPPING (switch=OFF, ispeed > 0) event: switch change
 // OFF_STOPPING -> OFF_READY (switch=OFF, ispeed = 0) event: ispeed became NULL
 
-enum Lead {MANUAL, PROGRAMMED};
+enum Lead {MANUAL=0, PROGRAMMED};
 enum Mode {WELCOME, CONF, RUN, PAUSE, REPORT};
 enum Status {ON_READY, ON_RUNNING, OFF_STOPPING, OFF_STOPPED}; // engine status
 
@@ -59,9 +60,9 @@ typedef struct {
   enum Mode mode;
   float rspeed, rspeed_backup, rspeed_next; // reference speed
   uint32_t rspeed_time_left;
-  float ispeed; // instant speed
-  TickType_t ispeed_timetick;
-  uint32_t slope, slope_backup; // reference slope
+  //  float is_speed; // instant speed
+  float ispeed;
+  uint32_t slope, slope_backup, slope_next; // reference slope
   uint32_t duration; 
   uint32_t nsteps;
   float distance;
