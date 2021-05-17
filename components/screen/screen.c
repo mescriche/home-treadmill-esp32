@@ -55,15 +55,16 @@ FrameItem run_layout[] = {
   { .name = "progress",    .frame = {{ 0, 123},  160, 4}}
 };
 
-const uint8_t report_layout_size = 7;
+const uint8_t report_layout_size = 8;
 FrameItem report_layout[] = {
-  {.name = "heading",  .frame = {{  0,  0},160, 28}},
-  {.name = "ylabel",   .frame={{  0, 28}, 50, 12}},
+  {.name = "heading",  .frame = {{  0,  0}, 80, 26}},
+  {.name = "ylabel",   .frame=  {{  0, 28}, 50, 12}},
   {.name = "aspeed",   .frame = {{ 50, 28}, 44, 12}},
-  {.name = "duration", .frame = {{110,112}, 50, 16}},
+  {.name = "duration", .frame = {{110,  4}, 50, 20}},
   {.name = "distance", .frame = {{ 10,112}, 50, 16}},
   {.name = "max_speed",.frame = {{ 110, 28}, 48, 12}}, //85
-  {.name = "race",     .frame = {{ 20, 40}, 120, 70}}
+  {.name = "race",     .frame = {{ 20,  40},120, 70}},
+  {.name = "race_size", .frame = {{110, 112}, 50, 16}}
 };
 
 Frame_t* search_layout(FrameItem* book, uint8_t size, char* key)
@@ -149,7 +150,7 @@ void show_configuration_manual_screen()
   displayStringOnFrame(frmp, value, &blue);
   displayFrame(frmp, &black);
   // structure
-  Pos_t p1 = {0,30};
+  Pos_t p1 = {0,28};
   displayHLine(p1, 160, &black);
 }
 
@@ -385,18 +386,20 @@ void show_report_screen(uint8_t status, float aspeed, float distance, uint32_t d
   // ylabel
   frm = search_layout(conf_layout, conf_layout_size, "ylabel");
   setFont(DF12PT);
-  displayStringOnFrame(*frm, "Km/h", &blue); 
+  displayStringOnFrame(*frm, "Km/h", &blue);
+  
   // race profile
   if (race_size > 0){
     frm = search_layout(report_layout, report_layout_size, "race");
     float max_speed = 1.0;
     for(uint i=0; i<race_size; i++)
       if (race[i] > max_speed) max_speed = race[i];
-
+    
+    float scale_speed = (aspeed > max_speed)? aspeed : max_speed;
     uint8_t x_scale = (frm->width / race_size <= 5)? frm->width / race_size : 5;
-    uint8_t y_scale = frm->height / max_speed;
-    ESP_LOGI(TAG, "height=%d, max_speed=%3.1f, y_scale=%d",frm->height, max_speed, y_scale);  
-    ESP_LOGI(TAG, "width=%d, race_size=%d, x_scale=%d", frm->width, race_size, x_scale);
+    uint8_t y_scale = frm->height / scale_speed;
+    //ESP_LOGI(TAG, "height=%d, max_speed=%3.1f, y_scale=%d",frm->height, max_speed, y_scale);  
+    //ESP_LOGI(TAG, "width=%d, race_size=%d, x_scale=%d", frm->width, race_size, x_scale);
     displayGraphOnFrame(*frm, x_scale, y_scale, race_size, race, &orange);
     Pos_t q = frm->pos;
     q.y = frm->pos.y+frm->height-(y_scale * aspeed);
@@ -418,17 +421,32 @@ void show_report_screen(uint8_t status, float aspeed, float distance, uint32_t d
   frm = search_layout(report_layout, report_layout_size, "distance");
   if (distance >= 1000) sprintf(value, "%.1f Km", distance/1000.0);
   else sprintf(value, "%3u m", (uint)distance);
-  setFont(UB16PT);
+  setFont(DF12PT);
   displayStringOnFrame(*frm, value, &red);
   //displayFrame(*frm, &black);
   // duration
   frm = search_layout(report_layout, report_layout_size, "duration");
-  int h,m; 
+  int h,m, s; 
   h = duration/3600;
   m = (duration - (3600*h))/60;
-  if (h>1) sprintf(value,"%01u:%02u",h,m);
-  else sprintf(value, "%1u min",m);
+  s = duration - h*3600 - m*60;
+  if (h>0) sprintf(value,"%01u:%02u",h,m);
+  else sprintf(value, "%02u:%02u",m,s);
+  //  else sprintf(value, "%1u sec", s);
   setFont(UB16PT);
+  displayStringOnFrame(*frm, value, &blue);
+    // race_size
+  frm = search_layout(report_layout, report_layout_size, "race_size");
+  //int h,m, s;
+  uint rsize = race_size;
+  if (duration >= 60) rsize *= 60;
+  h = rsize/3600;
+  m = (rsize - (3600*h))/60;
+  s = rsize - h*3600 - m*60;
+  if (h>0) sprintf(value,"%01u:%02u",h,m);
+  else if (m>0) sprintf(value, "%1u min",m);
+  else sprintf(value, "%1u sec", s);
+  setFont(DF12PT);
   displayStringOnFrame(*frm, value, &blue);
 }
 

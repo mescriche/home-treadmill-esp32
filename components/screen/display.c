@@ -267,14 +267,31 @@ void displayYaxis(Pos_t p, uint16_t length, uint8_t step, const color_t* fg)
 
 void displayGrid(Frame_t f, uint8_t x_step, uint8_t y_step, const color_t* fg)
 {
+  //ESP_LOGI(TAG, "DISPLAY GRID(x_step=%d, y_step=%d)", x_step, y_step);
   Pos_t q;
-  q.y = f.pos.y;
-  for(q.x=f.pos.x; q.x<=f.pos.x+f.width; q.x+=x_step)
-    displayVLine(q, f.height, fg);
-  q.x = f.pos.x;
-  for(q.y = f.pos.y + f.height; q.y>=f.pos.y;q.y-=y_step)
-    displayHLine(q, f.width, fg);
-  
+  if (x_step > 0){
+    q = f.pos;
+    uint8_t nvlines = f.width / x_step;
+    if (nvlines > 0){
+      for(uint k=0; k<nvlines; k++){
+	q.x += x_step;
+	//ESP_LOGI(TAG, "DISPLAY GRID VLine : q(x=%u, y=%u)", q.x, q.y);
+	displayVLine(q, f.height, fg);
+      }
+    }
+  }
+  if (y_step > 0){
+    q = f.pos;
+    q.y += f.height;
+    uint8_t nhlines = f.height / y_step;
+    if (nhlines > 0){
+      for(uint k=0; k<nhlines; k++){
+	q.y -= y_step;
+	//ESP_LOGI(TAG, "DISPLAY GRID HLine: q(x=%u, y=%u)", q.x, q.y);
+	displayHLine(q, f.width, fg);
+      }
+    }
+  }
 }
 void displayHLine(Pos_t p, uint16_t length, const color_t* fg)
 {

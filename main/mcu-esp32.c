@@ -39,7 +39,7 @@
 static const char *TAG = "HT";
 
 QueueHandle_t ispeed_track;
-QueueHandle_t ispeed_mailbox;
+//QueueHandle_t ispeed_mailbox;
 
 Blackboard bbrd = {.lead = MANUAL, .mode = WELCOME, .status = OFF_STOPPED,
   .temperature = 0.0, .humidity = 0.0,
@@ -97,15 +97,16 @@ static void start()
 static void stop(void* pvParam)
 {
   //xTaskNotify(pltfrm.speedctrl.admin, pdFALSE, eSetValueWithOverwrite);
-  bbrd.mode = REPORT;
-  bbrd.status = OFF_STOPPING;
   if (bbrd.lead == PROGRAMMED){
     session_end_program();
     vTaskDelete(pltfrm.speedctrl.leader);
   }
-  bbrd.lead = MANUAL;
   bbrd.rspeed = 0;
   bbrd.slope = 0;
+  bbrd.mode = REPORT;
+  bbrd.status = OFF_STOPPING;
+  bbrd.lead = MANUAL;
+  vTaskDelay(pdMS_TO_TICKS(1000));
   bbrd.session_end = xTaskGetTickCount();
   bbrd.duration = (bbrd.session_end - bbrd.session_begin - bbrd.pause_duration)/100;
   bbrd.aspeed = 3.6 * bbrd.distance / (float) bbrd.duration; // Km/h
@@ -138,7 +139,7 @@ static void screen_updater(void *pvParameter)
   TickType_t xLastWakeTime =  xTaskGetTickCount();
   char* username;
   Program *prgm = session_get_program(bbrd.programId);
-  float *speed_prgm, ispeed = 0;
+  float *speed_prgm;
   static uint8_t mode = 0, status = 0;
   //UBaseType_t uxHighWaterMark;
   while(1){
@@ -164,8 +165,7 @@ static void screen_updater(void *pvParameter)
       }
       break;
     case RUN:
-      xQueuePeek(ispeed_mailbox, &ispeed, (TickType_t)0);
-      show_run_screen(bbrd.lead, bbrd.mode, bbrd.status, bbrd.rspeed, ispeed, bbrd.aspeed,
+      show_run_screen(bbrd.lead, bbrd.mode, bbrd.status, bbrd.rspeed, bbrd.is_speed, bbrd.aspeed,
 		      bbrd.slope, bbrd.distance, bbrd.duration,
 		      bbrd.temperature, bbrd.humidity);
       if (bbrd.lead == PROGRAMMED){
@@ -184,12 +184,13 @@ static void screen_updater(void *pvParameter)
 			bbrd.temperature, bbrd.humidity);
 	xTaskNotify(pltfrm.screen.updater, pdTRUE, eSetValueWithOverwrite);
       } else if ((bbrd.status == OFF_STOPPED) && (ulTaskNotifyTake(pdTRUE, (TickType_t)0) == pdTRUE)) {
-	int32_t race_size = ((bbrd.session_end - bbrd.session_begin)/100)/60;
-	if (race_size < 1) {
-	  bbrd.mode = CONF;
-	  xTaskNotify(pltfrm.screen.updater, pdTRUE, eSetValueWithOverwrite);
-	} else
+	int32_t race_size = ((bbrd.session_end - bbrd.session_begin)/100); // seconds
+	if (race_size <= 60) 
+	  show_report_screen(bbrd.status, bbrd.aspeed, bbrd.distance, bbrd.duration, race_size, bbrd.srace);
+	else {
+	  race_size /= 60; // minutes
 	  show_report_screen(bbrd.status, bbrd.aspeed, bbrd.distance, bbrd.duration, race_size, bbrd.race);
+	}
       }
       break;
     default: show_welcome_screen();
@@ -237,7 +238,7 @@ static void speed_leader(void* pvParameter)
 	session_get_order(&order, &next_order);  // wait forever
 	if (order.speed == 0){
 	  xTaskCreatePinnedToCore(stop, "stop", STACK_SIZE, NULL, 12, NULL, PRO_CPU);
-	  vTaskSuspend(NULL);
+	  //	  vTaskSuspend(NULL);
 	} else {
 	  buzzer_beep_RSPEED();
 	  bbrd.rspeed = order.speed;
@@ -292,25 +293,27 @@ static void speedmeter_updater(void* pvParameter)
       if (time_delta > 0){
 	speed = 100 * distance / (float) time_delta;
 	ispeed.speed = 3.6 * speed;
-      } else
-	ESP_LOGI(TAG, "SPEEDMETER::time_delta=%d", time_delta);
-      ispeed.timetick = spd_rec.timetick;
+	ispeed.timetick = spd_rec.timetick;
+	//	ESP_LOGI(TAG, "SPEEDMETER:: speed=%3.1f, timetick=%d, delta=%d", 3.6*speed, spd_rec.timetick, time_delta); 
+      }
+      //      else ESP_LOGI(TAG, "SPEEDMETER:: error :: time_delta=%d", time_delta);
       bbrd.nsteps += spd_rec.nstep;
       bbrd.distance = step * bbrd.nsteps;
-      //ESP_LOGI(TAG, "SPEEDMETER:: speed=%f, steps=%d, time_delta=%f", 3.6*speed, spd_rec.nstep, time_delta); 
       timetick = spd_rec.timetick;
     } else {
-      ispeed.speed = 0;
       timetick =  xTaskGetTickCount();
+      ispeed.speed = 0;
+      ispeed.timetick = timetick;
     }
     bbrd.ispeed = ispeed.speed;
+    //ESP_LOGI(TAG, "SPEEDMETER:: ispeed record(%3.1f, %d)", ispeed.speed, ispeed.timetick);
     xQueueSend(ispeed_track, &ispeed, pdMS_TO_TICKS(50)); // Tmin = 62 ms for fmax = 16Hz
   }
 }
 
 static void ispeed_recorder(TickType_t start, TickType_t now)
 {
-  static float ispeed_book[60]; // 60 seconds
+  //static float ispeed_book[60]; // 60 seconds
   static ISpeedRecord ispeed, ispeed_prev = {0,0};
   Time ptime, etime;
   uint16_t nsec;
@@ -318,26 +321,29 @@ static void ispeed_recorder(TickType_t start, TickType_t now)
   uint32_t delta, delta_sum = 0;
   int32_t nmin;
   
+  // ESP_LOGI(TAG, "SPEED RECORDED :: start=%d, now=%d", start, now);
+  
   ptime = ticks_to_time(now - start);
   nsec = (ptime.sec == 0) ? 59 : ptime.sec - 1;
 
-  //ESP_LOGI(TAG, "ptime[mm:ss]=%02u:%02u, nsec=%02u", ptime.min, ptime.sec, nsec);
+  //ESP_LOGI(TAG, "SPEED RECORDED :: ptime[mm:ss]=%02u:%02u, nsec=%02u", ptime.min, ptime.sec, nsec);
   bool loop;
   do {
     loop = false;
-    if (xQueuePeek(ispeed_track, &ispeed, 0)){
+    if (xQueuePeek(ispeed_track, &ispeed, pdMS_TO_TICKS(50))){
       etime = ticks_to_time(ispeed.timetick - start);
       //	ESP_LOGI(TAG, "etime[mm:ss]=%02u:%02u", etime.min, etime.sec);
       if ( nsec >= etime.sec ){
 	xQueueReceive(ispeed_track, &ispeed, 0);
 	if (nsec == etime.sec){
 	  delta = ispeed.timetick - ispeed_prev.timetick;
-	  /* ESP_LOGI(TAG, "ispeed=%.1f, tick=%d, delta=%d, %02u:%02u", */
+	  /* ESP_LOGI(TAG, "SPEED RECORDED :: ispeed=%.1f, tick=%d, delta=%d, %02u:%02u", */
 	  /* 	     ispeed.speed, ispeed.timetick, delta, */
 	  /* 	     etime.min, etime.sec); */
 	  speed_delta += ispeed.speed * delta;
 	  delta_sum += delta;
-	} 
+	}
+	//	else ESP_LOGI(TAG, "SPEED RECORDED :: discarded: (ispeed=%.1f, tick=%d)", ispeed.speed, ispeed.timetick);
 	ispeed_prev = ispeed;
 	loop = true;
       }
@@ -345,18 +351,19 @@ static void ispeed_recorder(TickType_t start, TickType_t now)
   } while (loop);
   if (delta_sum > 0) av_speed = speed_delta / (float) delta_sum;
   else av_speed = 0;
-  ispeed_book[nsec] = av_speed;
-  //  bbrd.is_speed = av_speed;
-  xQueueOverwrite(ispeed_mailbox, &av_speed);
-  /* ESP_LOGI(TAG, "ispeed[%d]=%.1f",nsec,ispeed_book[nsec]); */
+  //ispeed_book[nsec] = av_speed;
+  bbrd.srace[nsec] = av_speed;
+  bbrd.is_speed = av_speed;
+  //xQueueOverwrite(ispeed_mailbox, &av_speed);
+  //ESP_LOGI(TAG, "SPEED RECORDER :: srace[%d]=%.1f",nsec, bbrd.srace[nsec]);
   
   if (nsec == 59){
     av_speed = 0;
-    for(uint16_t i=0; i<60; i++) av_speed += ispeed_book[i];
+    for(uint16_t i=0; i<60; i++) av_speed += bbrd.srace[i];
     nmin = ptime.min - 1;
     if ((nmin >= 0) && (nmin < MAX_TIME)){
       bbrd.race[nmin] = av_speed/60.0;
-      ESP_LOGI(TAG, "ptime[mm:ss]= %02u:%02u, race[%d]=%.1f", ptime.min, ptime.sec, nmin, bbrd.race[nmin]);
+      ESP_LOGI(TAG, "SPEED RECORDED :: ptime[mm:ss]= %02u:%02u, race[%d]=%.1f", ptime.min, ptime.sec, nmin, bbrd.race[nmin]);
     }
   }
 }
@@ -479,8 +486,9 @@ void app_main()
   session_init();
   bbrd.programId = 0;
   //UBaseType_t uxHighWaterMark;
-  ispeed_mailbox = xQueueCreate(1, sizeof(float));
-  ispeed_track = xQueueCreate(50, sizeof(ISpeedRecord));
+  //ispeed_mailbox = xQueueCreate(1, sizeof(float));
+  ispeed_track = xQueueCreate(20, sizeof(ISpeedRecord));
+  //xQueueSend(ispeed_mailbox, &bbrd.ispeed, (TickType_t)0);
   //
   buzzer_init(&pltfrm.buzzer);
   //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
@@ -523,9 +531,12 @@ void app_main()
   //
   //  bbrd.session_begin = xTaskGetTickCount();
   xLastWakeTime =  xTaskGetTickCount();
+  
   //Time work_time;
   //UBaseType_t uxHighWaterMark;
+
   while (1){
+    //xQueuePeek(ispeed_mailbox, &ispeed, (TickType_t)0);
     //uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
     //ESP_LOGI(TAG, "MAIN :: watermark=%d", uxHighWaterMark);
     now = xLastWakeTime;

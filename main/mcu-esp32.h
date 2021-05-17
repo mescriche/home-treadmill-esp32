@@ -60,7 +60,7 @@ typedef struct {
   enum Mode mode;
   float rspeed, rspeed_backup, rspeed_next; // reference speed
   uint32_t rspeed_time_left;
-  //  float is_speed; // instant speed
+  float is_speed; // instant speed
   float ispeed;
   uint32_t slope, slope_backup, slope_next; // reference slope
   uint32_t duration; 
@@ -72,6 +72,7 @@ typedef struct {
   float temperature, humidity;
   int16_t programId;
   float race[MAX_TIME]; //
+  float srace[60];
 } Blackboard;
 
 typedef struct {
