@@ -9,8 +9,8 @@ static Program* book[] = {
   &maeg1, &maeg2, &maeg3,
   &mieg1,
   &mjgg1, &mjgg2, &mjgg3,
-  //  &test,
-  &mev1, &mev2, &mev3, &mev4
+  &mev1, &mev2, &mev3, &mev4,
+  &test,
 };
 static uint16_t book_size = 0;
 static Program** user_book = NULL;

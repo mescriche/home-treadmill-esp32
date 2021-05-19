@@ -118,6 +118,7 @@ void clear_screen()
 }
 void show_welcome_screen()
 {
+  display_clear(&white);
   Frame_t frm = {{0,40}, 160, 50};
   char *heading = get_heading(WELCOME, ANY);
   setFont(DV24PT);
@@ -126,6 +127,7 @@ void show_welcome_screen()
 }
 void show_configuration_manual_screen()
 {
+  display_clear(&white);
   char value[20];
   Frame_t frm =  {{0,0}, 160, 30};
   char *heading = get_heading(CONF, ANY);
@@ -373,6 +375,7 @@ void show_report_screen(uint8_t status, float aspeed, float distance, uint32_t d
 			uint32_t race_size, float* race)
 {
   //ESP_LOGI(TAG, "REPORT SCREEN :: race_size = %d", race_size);
+  display_clear(&white);
   Frame_t *frm;
   char value[20];
   // heading
