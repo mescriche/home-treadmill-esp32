@@ -1,0 +1,265 @@
+\documentclass[12pt, a4paper, twoside]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+\usepackage{hyperref}
+\usepackage{shorttoc}
+
+
+\title{Notes on Home Treadmill}
+\author{Manuel Escriche}
+\date{\today}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+Some notes taken on how the treadmill at home was repaired by making a new controller.
+
+This new controller was implemented by using an Esp32 SoC to control de motors and interact with human users. 
+Esp32 SoC has been programmed in C language on top of \href{https://github.com/espressif/esp-idf}{ESP-IDF libraries stack} which includes FreeRTOS. 
+
+These notes are intended to help when having to come back to fix any bug, repair any hardware or even improve it by adding new components.
+\end{abstract}
+\thispagestyle{empty}
+\setcounter{tocdepth}{1}
+\tableofcontents
+
+
+\newpage
+
+\section{Operative Know How}
+\paragraph {Setting the work environment} 
+\begin{verbatim}
+> alias
+> get_idf
+\end{verbatim}
+
+\paragraph{Configuring compilation}
+\begin{verbatim}
+> idf.py menuconfig
+\end{verbatim}
+It displays a screen where to select options that configure compiling directives used by components like Logs, RTOS, etc
+As an example the last version installed in the treadmill machine is compiled with No logs. 
+
+\paragraph{Compiling the program}
+\begin{verbatim}
+> idf.py build
+\end{verbatim}
+
+\paragraph{Cleaning workspace}
+Sometimes weird things happen and there's need to clean up all content in the work space, then two commands are avaible:
+\begin{verbatim}
+> idf.py clean 
+> idf.py fullclean
+\end{verbatim}
+
+\paragraph{Flashing into the  mcu}
+\begin{verbatim}
+> idf.py -p /dev/cu.SLAB_USBtoUART flash
+> idf.py -p /dev/cu.SLAB_USBtoUART flash monitor
+\end{verbatim}
+
+\paragraph{Getting help about esp-idf}
+\href{https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/}{ESP-IDF Programming Guide}
+
+\paragraph{Getting help about RTOS}
+\href{https://www.freertos.org/Documentation/RTOS_book.html}{FreeRTOS Documentation}
+
+\newpage
+\section{How to modify speed programs}
+Speed programs are stored in the file \verb+~/main/programs.c+, which need to be edited for any change.
+Look at the example below. 
+\begin{verbatim}
+Program  test = {
+  .owner= "MEV",
+  .oseq = { {4,1,0}, {6,1,0}, {0,0,0} //end token
+  }
+};
+\end{verbatim}
+It's important to assign a known owner, which are: \verb+{"MEV", "MJGG", "MiEG", "MaEG"}+ corresponding to \verb+{"Manuel", "Marichu", "Miguel", "Manu"}+
+
+The order sequence is composed of pieces holding three values \verb+{speed, time, slope}+, whose units are subsequently \verb+{Km/h, minutes, %inclination}+.
+The order sequence must finish with \verb+{0,0,0}+ in order to finish the program.
+
+Optionally, you have to edit the file \verb+~/main/session.c+, and specifically the sentences below in order to create new speed programs, or to remove old ones, but you don't need to touch it just for adjusting values. 
+\begin{verbatim}
+extern Program test, mev1, mev2, mev3, mev4, 
+			maeg1, maeg2, maeg3,  mieg1,  mjgg1, mjgg2, mjgg3;                
+
+static Program* book[] = {
+  &maeg1, &maeg2, &maeg3, &mieg1,
+  &mjgg1, &mjgg2, &mjgg3,
+  &mev1, &mev2, &mev3, &mev4, &test,
+};
+\end{verbatim}
+
+In summary, the steps to take are:
+\begin{enumerate}
+\item Edit the file \verb+programs.c+
+\item Optionally edit the file \verb+session.c+
+\item Compile it: \verb+> idf.py build+
+\item and Flash it: \verb+> idf.py -p /dev/cu.SLAB_USBtoUART flash+
+\end{enumerate}
+
+\newpage
+\section {Hardware}
+A PCB  (=Printed Circuit Board) has been designed by using KiCad, have a look at the scheme in figure~\ref{fig:schema}:
+\begin{figure}[h!]
+\includegraphics[scale=0.45]{schema}
+\caption{home treadmill schema}
+\label{fig:schema}	
+\centering
+\end{figure}
+
+This PCB basically holds the interface to the power phase of the treadmill, and the mcu esp32, with connectors for a screen, a small keypad, an I2C bus and RS232 conection.
+
+\subsection{Treadmill Interface}
+Three connectors J1-Speed, J2-Slope and J3-Security conform the interface to the treadmill platform.
+\paragraph{Power Input} happens at the pins 6,1 (VDD, GND) of J2 .
+\paragraph{Security} connector J3 is connected to a micro switch spdt held on by a magnetic piece, which is taken off by the user in case of emergency. This micro switch cuts off pcb power through SW signal, which acts over VDD.
+\paragraph{Speed input} is taken by pulses on pin 2 of J2.
+\paragraph{Speed control} happens by using pins 1,2 of J1. These signals allow controlling speed:  SPD+ speeds up engine, and SPD+ slows down it.
+\paragraph{Slope control} occurs by using pins 5,4 of J2. These signals allow setting slope: INC+ increases slope, and INC+ decreases it.
+Additionally J9-Treadmill control has been provided just for signal verification purposes, in order to verify electronics between mcu and treadmill.
+
+\subsection{Screen Interface}
+The connector J5-TFT RGB LCD is the physical interface to the screen. It holds pins for controlling an ST7735 128x160 screen. Its control is made effective through an SPI (Serial Peripheral Interface) using signals SCL(=clock), SDA(=MOSI) and CS(=chip select), leaving MISO out since the screen isn't producing any input.
+
+Additionally there're the signals needed for the screen itself: RST(=reset), DC(=data/command), and BL(=backlight).
+
+\subsection{Keypad Interface}
+The connector J7-Keyboard conform the interface to the keypad. Initially it was thought to manage keys for speed, slope and stop/walk. However, it was modified to be connected to an I2C-GPIO Extension module since 8 keys were used in the keypad:
+Slope(2 keys), Speed(4 keys), Start/Stop(1 key), Pause(1 key).
+
+\subsection{RS232 and I2C Interfaces}
+\paragraph{IIC} interface to the ambient sensor so that temperature and humidity can be measured and displayed on screen
+\paragraph{RS232} interface to connect a Rasperry Pi3 meant to display speed programs and speed evolution. 
+
+\subsection{PCB Implementation}
+KiCaD PCB has been used to design the PCB. Its manufacturing was done by \href{https://www.pcbway.com/}{PCBWay}
+\begin{figure}[h!]
+\includegraphics[scale=0.45]{pcb}
+\caption{home treadmill pcb - design}
+\label{fig:pcb}	
+\centering
+\end{figure}
+
+\begin{figure}[h!]
+\includegraphics[scale=0.07, angle=-90]{IMG_6765}
+\includegraphics[scale=0.07, angle=-90]{IMG_6766}
+\caption{home treadmill pcb - implementation}
+\centering
+\end{figure}
+
+\subsubsection{Signals mapping}
+This is the final mapping between mcu pins and interfaces' signals.
+\begin{table}[h!]
+\centering
+\begin{tabular}{||l|r||}
+\hline 
+ \multicolumn{2}{||c||}{TM Interface} \\
+ \hline\hline
+ Signal & GPIO \\
+ \hline\hline
+ INC+& 27 \\  INC- & 19  \\ \hline
+ SPD+ & 4 \\ SPD- & 2 \\ \hline
+ SW & 26 \\ iSPD & 33 \\ \hline
+ BZZ & 25 \\ \hline
+\end{tabular}
+\quad
+\begin{tabular}{||l|r||}
+\hline 
+ \multicolumn{2}{||c||}{LCD Interface} \\
+ \hline\hline
+ Signal & GPIO \\
+ \hline\hline
+ BL & 14 \\  DC & 32  \\ \hline
+ RST & 12 \\ CS & 5 \\ \hline
+ SDA & 23 \\ SCL & 18 \\ \hline
+  & \\ \hline
+\end{tabular}
+\quad
+\begin{tabular}{||l|r||}
+\hline 
+ \multicolumn{2}{||c||}{Keypad Interface} \\
+ \hline\hline
+ Signal & GPIO \\
+ \hline\hline
+SCL & 15 \\ SDA & 13 \\ \hline 
+INT & 35 \\ 
+ & \\ \hline & \\  &  \\ \hline   & \\ \hline
+\end{tabular}
+\quad
+\begin{tabular}{||l|r||}
+\hline 
+ \multicolumn{2}{||c||}{IIC Interface} \\
+ \hline\hline
+ Signal & GPIO \\
+ \hline\hline
+SDA & 21 \\ SCL & 22 \\ \hline 
+\end{tabular}
+\quad
+\begin{tabular}{||l|r||}
+\hline 
+ \multicolumn{2}{||c||}{RS232 Interface} \\
+ \hline\hline
+ Signal & GPIO \\
+ \hline\hline
+RX2 & 16 \\ TX2 & 17\\ \hline 
+\end{tabular}
+\caption{MCU - signals mapping}
+\label{table:1}
+\end{table}
+
+Obviously GPIOs are a way to point out what pins have been used. Strictly speaking GPIO(13,15) refers to I2C-0, GPIO(22,21) refers to I2C-1 interface, and GPIO(16,17) to UART2, and GPIO(5,18,23) to VSPI.
+ 
+\subsection{Drawbacks and Surprises}
+Well, not everything worked according to design and some modifications were introduced at hardware level in order to overcome specific drawbacks:
+\begin{itemize}
+\item GPIO1 and GPIO3 working as UART 0 as (TX,RX) were used by idf.py in order to monitor logs. So there was a conflict with using them for the signals (INC+, INC-) in the treadmill platform. I had to disconnect them in order to get logs. 
+\item GPIO35 was used as an input for the INC+ input in the keypad, but GPIOs 34,35,36 and 39 have no way to configure any pull-up or pull-down resistor, as a consequence a lot of noise in the signal preventing its use. 
+\item As first keypad prototype was set up soon it became evident 2 more keys were needed  for speed. Four keys would allow to order decimal speed like 5.6 km/h. So instead of connecting key keypad directly to the MCU, the PCF8574 I/O Expander - I2C module was included.
+\end{itemize}
+
+Happily,  adding more keys allowed to implement at software level speed programs without having to use a Raspberry Pi3, as initially planned.  
+
+\subsection{Next Steps}
+Well, when we use the treadmill machine we all end up using the smart phone to play music. 
+\begin{enumerate}
+\item Adding a bluetooth loadspeaker
+\item Detach treadmill electronics into a module different from mcu would allow changing the controller.  
+\item A hardware module for dc power with usb connectors would allow adding bluetooth speakers. 
+\end{enumerate}
+\newpage
+\section {Software}
+Well, the mcu has two cores: first one is used to control the speed motor, the other one to interact with the user.
+
+Several RTOS tasks are created in order to attend all events happening while controlling motors.
+ 
+\begin{itemize}
+\item Buzzer task that produces beeps from orders sent to its queue.
+\item Screen task that displays blackboard information on the screen according to the program mode, and notifications.
+\item Keypad task that processes input information from keys through interruptions.
+\item Speed measurement task that works out speed from speed interruptions.
+\item Speed control task that controls motor speed to follow reference speed.
+\item Speed leader task that provides reference speed according to the speed program selected.
+\item Main task that supervises status, working time, and records speed race.
+\end{itemize}
+
+A blackboard is used to share information among tasks.
+
+Software has been structured in components:
+
+\begin{figure}[h!]
+\centering
+\includegraphics[scale=0.5]{SoftCom}
+\caption{home treadmill software components}
+\end{figure}
+
+\newpage
+\section{Figures and Tables}
+\tableofcontents
+\listoffigures
+\listoftables
+
+\end{document}
