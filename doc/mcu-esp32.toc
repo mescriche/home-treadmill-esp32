@@ -24,4 +24,7 @@
 \contentsline {subsection}{\numberline {3.6}Drawbacks and Surprises}{7}{subsection.3.6}%
 \contentsline {subsection}{\numberline {3.7}Next Steps}{8}{subsection.3.7}%
 \contentsline {section}{\numberline {4}Software}{9}{section.4}%
-\contentsline {section}{\numberline {5}Figures and Tables}{10}{section.5}%
+\contentsline {paragraph}{}{9}{section*.16}%
+\contentsline {paragraph}{}{9}{section*.17}%
+\contentsline {paragraph}{}{10}{section*.18}%
+\contentsline {section}{\numberline {5}Figures and Tables}{11}{section.5}%
