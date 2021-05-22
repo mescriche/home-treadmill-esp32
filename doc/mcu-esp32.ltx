@@ -4,7 +4,7 @@
 \graphicspath{ {./images/} }
 \usepackage{hyperref}
 \usepackage{tikz}
-\usetikzlibrary{shapes, positioning, arrows.meta}
+\usetikzlibrary{shapes, calc, positioning, arrows.meta}
 
 \title{Notes on Home Treadmill}
 \author{Manuel Escriche}
@@ -247,9 +247,6 @@ Several RTOS tasks are created in order to attend all events happening while con
 \end{itemize}
 
 \paragraph{}
-A blackboard is used to share information among tasks.
-
-\paragraph{}
 It's important to know the system behaves according to four modes:
 
 \begin{figure}[h!]
@@ -265,11 +262,16 @@ post/.style={->, shorten >=1pt, >={Stealth[round]},semithick}]
 \node[key] (k1) [right=1.5cm of init] {k1};
 \node[key] (k0) [right=2mm of k1] {k0};
 \node[state]  (conf)  [below= of init] {CONF};
-\node[state]  (run) [below= of conf] {RUN};
+\node[state]  (prog) [right= of conf] {PROG};
+\node[state]  (run) [below = 1.5cm of $(conf)!0.5!(prog)$] {RUN};
 \node[state]  (pause) [right=of run] {PAUSE};
 \node[state]  (report) [below=of run] {REPORT};
 \draw[post] (init) to (conf);
-\draw[post] (conf) to node[auto,swap]{k0} (run) ;
+\draw[post, bend left=45] (conf.15) to node[auto]{k1} (prog.165);
+\draw[post, bend left=0] (prog.190) to node[auto,swap]{k1} (conf.350);
+\draw[post, bend right=10] (prog.10) .. controls +(45:1.5cm) and +(-45:1.5cm) .. node[auto]{\shortstack[l]{prog keys \\ user keys}}  (prog.350);
+\draw[post] (prog.south) to node[auto,swap]{k0} (run.80);
+\draw[post] (conf.south) to node[auto]{k0} (run.100) ;
 \draw[post, bend left=30] (run.15) to node[auto]{k1} (pause.165);
 \draw[post, bend left=30] (pause.195) to node[auto,swap]{k1} (run.345);
 \draw[post] (pause) to node[auto]{k0} (report.10);
@@ -282,11 +284,15 @@ post/.style={->, shorten >=1pt, >={Stealth[round]},semithick}]
 \end{figure}
 
 \begin{description}
-\item[CONF] it refers to Configuration. It allows going into manual control where the user sets the reference speed and slope, and the speed program mode, where the user selects a specific speed program for the session. 
+\item[CONF \& PROG] both refer to Configuration. It allows going into manual control where the user sets the reference speed and slope, and by pushing k1 going into PROG meaning speed programs mode where the user selects a specific speed program for the session. 
 \item[RUN] Once the start/stop key is pushed the motor runs according to reference speed. The key start/stop allows getting in and out. 
 \item[PAUSE] The pause key allows to temporarily stop the motor to take a breath, drink water, or anything. Maximum time in pause is 5 minutes. User get in and out by pushing on pause key.
 \item[REPORT] Once stop key is pushed, the race report is shown on screen. By pushing start/stop or pause/conf keys you  move on to Configuration in order to allow a new session.
 \end{description}
+
+\paragraph{}
+A blackboard is used to share information among tasks.
+
 \paragraph{}
 Software has been structured in components:
 
