@@ -1,0 +1,30 @@
+\contentsline {section}{\numberline {1}Operative Know How}{2}{section.1}%
+\contentsline {paragraph}{Setting the work environment}{2}{section*.2}%
+\contentsline {paragraph}{Configuring compilation}{2}{section*.3}%
+\contentsline {paragraph}{Compiling the program}{2}{section*.4}%
+\contentsline {paragraph}{Cleaning workspace}{2}{section*.5}%
+\contentsline {paragraph}{Flashing into the mcu}{2}{section*.6}%
+\contentsline {paragraph}{Getting help about esp-idf}{2}{section*.7}%
+\contentsline {paragraph}{Getting help about RTOS}{2}{section*.8}%
+\contentsline {section}{\numberline {2}How to modify speed programs}{3}{section.2}%
+\contentsline {section}{\numberline {3}Hardware}{4}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Treadmill Interface}{4}{subsection.3.1}%
+\contentsline {paragraph}{Power Input}{4}{section*.9}%
+\contentsline {paragraph}{Security}{4}{section*.10}%
+\contentsline {paragraph}{Speed input}{5}{section*.11}%
+\contentsline {paragraph}{Speed control}{5}{section*.12}%
+\contentsline {paragraph}{Slope control}{5}{section*.13}%
+\contentsline {subsection}{\numberline {3.2}Screen Interface}{5}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Keypad Interface}{5}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}RS232 and I2C Interfaces}{5}{subsection.3.4}%
+\contentsline {paragraph}{IIC}{5}{section*.14}%
+\contentsline {paragraph}{RS232}{5}{section*.15}%
+\contentsline {subsection}{\numberline {3.5}PCB Implementation}{5}{subsection.3.5}%
+\contentsline {subsubsection}{\numberline {3.5.1}Signals mapping}{7}{subsubsection.3.5.1}%
+\contentsline {subsection}{\numberline {3.6}Drawbacks and Surprises}{7}{subsection.3.6}%
+\contentsline {subsection}{\numberline {3.7}Next Steps}{8}{subsection.3.7}%
+\contentsline {section}{\numberline {4}Software}{9}{section.4}%
+\contentsline {paragraph}{}{9}{section*.16}%
+\contentsline {paragraph}{}{10}{section*.17}%
+\contentsline {paragraph}{}{10}{section*.18}%
+\contentsline {section}{\numberline {5}Figures and Tables}{11}{section.5}%

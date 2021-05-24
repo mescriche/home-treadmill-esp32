@@ -17,7 +17,7 @@ typedef struct {
 
 typedef struct {
   uint32_t nstep; // meters
-  TickType_t timestamp;
+  TickType_t timetick;
 } SpeedRecord_t;
 
 void speedmeter_init(SpeedMeter_t* self);

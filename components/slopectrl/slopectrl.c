@@ -23,6 +23,10 @@ void slopectrl_init(SlopeCtrl_t* self)
   gpio_set_level(self->pslp_pin, 0);
   gpio_set_level(self->mslp_pin, 0);
   level_time = pdMS_TO_TICKS(SLP_TMAX / self->nlevels);
+  // 
+  gpio_set_level(self->mslp_pin,1);
+  vTaskDelay(2*level_time);
+  gpio_set_level(self->mslp_pin,0);
   
 }
 
@@ -58,4 +62,7 @@ void slopectrl_stop()
     gpio_set_level(pself->mslp_pin, 0);
     pself->level--;
   };
+  gpio_set_level(pself->mslp_pin, 1);
+  vTaskDelay(2*level_time);
+  gpio_set_level(pself->mslp_pin, 0);
 }

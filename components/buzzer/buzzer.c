@@ -85,6 +85,12 @@ void buzzer_beep_keyOK()
   buzzer_beep(2.0, 150);
 }
 
+void buzzer_beep_RSPEED()
+{
+  buzzer_beep(2.0, 300);
+  buzzer_beep(2.0, 300);
+}
+
 void buzzer_beep_START()
 {
   buzzer_beep(2.4, 300);
@@ -99,6 +105,6 @@ void buzzer_beep_STOP()
 
 void buzzer_beep_keyFAIL()
 {
-  buzzer_beep(0.5, 150);
+  buzzer_beep(0.8, 150);
 }
 

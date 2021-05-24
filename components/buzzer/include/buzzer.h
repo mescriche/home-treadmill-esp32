@@ -25,6 +25,7 @@ void buzzer_beep_keyOK();
 void buzzer_beep_STOP();
 void buzzer_beep_START();
 void buzzer_beep_keyFAIL();
+void buzzer_beep_RSPEED();
 
 //void heart_beat(void* arg);
 
